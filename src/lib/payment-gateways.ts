@@ -49,7 +49,8 @@ export function verifyRazorpayPaymentSignature(
 }
 
 /**
- * Creates Razorpay Order on Razorpay API if live credentials are configured.
+ * Creates Razorpay Order on Razorpay API.
+ * Throws a descriptive error if credentials are invalid or order creation fails.
  */
 export async function createRazorpayOrder({
   amountCents,
@@ -59,13 +60,14 @@ export async function createRazorpayOrder({
   amountCents: number;
   receipt: string;
   notes?: Record<string, string>;
-}): Promise<{ id: string; amount: number; currency: string } | null> {
+}): Promise<{ id: string; amount: number; currency: string }> {
   const keyId = process.env.RAZORPAY_KEY_ID;
   const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
-  // If live credentials are placeholder, return null to gracefully fallback to sandbox mode
   if (!keyId || !keySecret || keyId.includes("dummy") || keySecret.includes("placeholder")) {
-    return null;
+    throw new Error(
+      "Razorpay Gateway Configuration Required: Please provide valid RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in environment variables.",
+    );
   }
 
   try {
@@ -77,7 +79,7 @@ export async function createRazorpayOrder({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        amount: amountCents, // Razorpay takes amounts in paise (cents)
+        amount: amountCents, // Razorpay takes amounts in paise (cents: 100 paise = 1 INR)
         currency: "INR",
         receipt,
         notes,
@@ -85,9 +87,16 @@ export async function createRazorpayOrder({
     });
 
     if (!res.ok) {
-      const err = await res.text();
-      console.error("Razorpay order creation error:", err);
-      return null;
+      const errText = await res.text();
+      console.error("Razorpay order creation error:", errText);
+      let desc = "Razorpay rejected the order creation.";
+      try {
+        const parsed = JSON.parse(errText);
+        if (parsed.error?.description) {
+          desc = parsed.error.description;
+        }
+      } catch {}
+      throw new Error(`Razorpay Error: ${desc}`);
     }
 
     const data = await res.json();
@@ -96,8 +105,8 @@ export async function createRazorpayOrder({
       amount: data.amount,
       currency: data.currency,
     };
-  } catch (err) {
-    console.error("Razorpay fetch error:", err);
-    return null;
+  } catch (err: any) {
+    console.error("Razorpay API exception:", err);
+    throw new Error(err.message || "Failed to communicate with Razorpay payment gateway.");
   }
 }

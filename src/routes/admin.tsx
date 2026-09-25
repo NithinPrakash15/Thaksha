@@ -812,7 +812,8 @@ function AdminDashboardPage() {
                         <th className="p-3.5">Order Ref</th>
                         <th className="p-3.5">Customer & Phone</th>
                         <th className="p-3.5">Items</th>
-                        <th className="p-3.5">Status</th>
+                        <th className="p-3.5">Order Status</th>
+                        <th className="p-3.5">Payment</th>
                         <th className="p-3.5">Airway Bill</th>
                         <th className="p-3.5">Total</th>
                         <th className="p-3.5 text-right">Manage</th>
@@ -821,17 +822,19 @@ function AdminDashboardPage() {
                     <tbody className="divide-y divide-[#2C2825]">
                       {filteredOrders.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="p-8 text-center text-[#9D968D]">
+                          <td colSpan={8} className="p-8 text-center text-[#9D968D]">
                             No orders found under this status filter.
                           </td>
                         </tr>
                       ) : (
-                        filteredOrders.map((o) => (
+                        filteredOrders.map((o: any) => (
                           <tr key={o.id} className="hover:bg-[#25211E]/50">
                             <td className="p-3.5 font-mono text-[#C59B63] font-semibold">{o.orderNumber}</td>
                             <td className="p-3.5">
                               <p className="font-semibold text-[#EFECE6]">{o.customerName}</p>
-                              <p className="text-[10px] text-[#9D968D]">{o.email} • {o.phone}</p>
+                              <p className="text-[10px] text-[#9D968D]">
+                                {o.email} • {o.phone}
+                              </p>
                             </td>
                             <td className="p-3.5 text-[#B6AFA5]">
                               {o.items.map((i: any) => `${i.name} (${i.quantity})`).join(", ")}
@@ -848,6 +851,32 @@ function AdminDashboardPage() {
                               >
                                 {o.status}
                               </span>
+                            </td>
+                            <td className="p-3.5">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider font-semibold ${
+                                      o.paymentStatus === "CAPTURED" || o.paymentStatus === "PAID"
+                                        ? "bg-emerald-950 text-emerald-300 border border-emerald-800"
+                                        : o.paymentStatus === "FAILED"
+                                          ? "bg-red-950 text-red-300 border border-red-800"
+                                          : "bg-amber-950 text-amber-300 border border-amber-800"
+                                    }`}
+                                  >
+                                    {o.paymentStatus || "PENDING"}
+                                  </span>
+                                  <span className="text-[10px] text-[#9D968D]">{o.paymentProvider || "RAZORPAY"}</span>
+                                </div>
+                                {o.transactionId && o.transactionId !== "—" && (
+                                  <p
+                                    className="font-mono text-[9px] text-[#C59B63] truncate max-w-[130px]"
+                                    title={o.transactionId}
+                                  >
+                                    {o.transactionId}
+                                  </p>
+                                )}
+                              </div>
                             </td>
                             <td className="p-3.5 font-mono text-xs text-[#9D968D]">
                               {o.trackingNumber || "—"}

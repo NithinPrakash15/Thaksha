@@ -11,16 +11,21 @@ export const Route = createFileRoute("/api/webhooks/payment")({
           const signature = request.headers.get("x-razorpay-signature") || "";
           const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET || "";
 
-          // Verify signature if secret is configured
-          if (webhookSecret && !webhookSecret.includes("placeholder")) {
-            const isValid = verifyRazorpaySignature(rawBody, signature, webhookSecret);
-            if (!isValid) {
-              console.warn("Unauthorized webhook signature detected.");
-              return new Response(JSON.stringify({ error: "Invalid signature" }), {
-                status: 401,
-                headers: { "Content-Type": "application/json" },
-              });
-            }
+          if (!webhookSecret || webhookSecret.includes("placeholder")) {
+            console.error("Webhook secret not configured on server.");
+            return new Response(JSON.stringify({ error: "Webhook secret not configured" }), {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+
+          const isValid = verifyRazorpaySignature(rawBody, signature, webhookSecret);
+          if (!isValid) {
+            console.warn("Unauthorized webhook signature detected.");
+            return new Response(JSON.stringify({ error: "Invalid signature" }), {
+              status: 401,
+              headers: { "Content-Type": "application/json" },
+            });
           }
 
           let event: any = {};

@@ -283,8 +283,10 @@ export const getAdminOrdersFn = createServerFn({ method: "GET" }).handler(async 
     address: o.address
       ? `${o.address.line1}, ${o.address.city}, ${o.address.region} - ${o.address.postal}`
       : "Not specified",
-    paymentProvider: o.payments[0]?.provider || "MANUAL",
+    paymentProvider: o.payments[0]?.provider || "RAZORPAY",
     paymentStatus: o.payments[0]?.status || "PENDING",
+    paymentMethod: o.payments[0]?.paymentMethod || "UPI / Card / Netbanking",
+    transactionId: o.payments[0]?.transactionId || o.payments[0]?.reference || "—",
     trackingNumber: o.trackingNumber,
     carrier: o.carrier,
     date: o.createdAt.toLocaleDateString("en-IN", {

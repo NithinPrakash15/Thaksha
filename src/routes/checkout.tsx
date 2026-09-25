@@ -9,6 +9,7 @@ import {
   validateCouponFn,
   createOrderAndPaymentFn,
   verifyAndCapturePaymentFn,
+  recordPaymentFailureFn,
   type PricingCalculation,
 } from "@/lib/server-orders";
 import {
@@ -156,13 +157,44 @@ function CheckoutPage() {
     toast.info("Coupon removed.");
   };
 
-  // Process checkout submission
+  // Dynamically load Razorpay standard checkout script
+  const loadRazorpayCheckoutScript = (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if (typeof window === "undefined") return resolve(false);
+      if ((window as any).Razorpay) return resolve(true);
+
+      const existing = document.getElementById("razorpay-checkout-script");
+      if (existing) {
+        existing.addEventListener("load", () => resolve(true));
+        existing.addEventListener("error", () => resolve(false));
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.id = "razorpay-checkout-script";
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  // Process checkout submission via official Razorpay Standard Checkout SDK
   const handleCompletePayment = async () => {
     if (!pricing) return;
     setSubmitting(true);
 
     try {
-      // 1. Create order atomically in PostgreSQL
+      // 1. Ensure Razorpay Checkout SDK script is loaded
+      const isLoaded = await loadRazorpayCheckoutScript();
+      if (!isLoaded) {
+        throw new Error(
+          "Unable to connect to the secure payment gateway. Please check your internet connection.",
+        );
+      }
+
+      // 2. Create authoritative order and Razorpay gateway order on the server
       const created = await createOrderAndPaymentFn({
         data: {
           name,
@@ -175,35 +207,108 @@ function CheckoutPage() {
           postal,
           items: cart,
           couponCode: appliedCoupon,
-          paymentProvider,
+          paymentProvider: "RAZORPAY",
         },
       });
 
-      // 2. Process server payment capture (Simulated Gateway Verification for instant live fulfillment)
-      const captureResult = await verifyAndCapturePaymentFn({
-        data: {
-          orderId: created.orderId,
-          transactionId: `${paymentProvider}-${Date.now()}`,
-          paymentMethod: paymentProvider === "RAZORPAY" ? "UPI / Razorpay Gateway" : "Stripe Card Payment",
+      if (!created.razorpayOrderId || !created.razorpayKeyId) {
+        throw new Error("Payment Gateway Error: Invalid order configuration received from server.");
+      }
+
+      // 3. Launch official Razorpay Standard Checkout Modal
+      const options = {
+        key: created.razorpayKeyId,
+        amount: created.amountPaise,
+        currency: created.currency || "INR",
+        name: "Thaksha Luxury Rituals",
+        description: `Order ${created.orderNumber}`,
+        image: "/thaksha-logo.png",
+        order_id: created.razorpayOrderId,
+        prefill: {
+          name: created.customerName || name,
+          email: created.email || email,
+          contact: created.phone || phone,
         },
+        theme: {
+          color: "#2C1810",
+        },
+        modal: {
+          ondismiss: () => {
+            setSubmitting(false);
+            recordPaymentFailureFn({
+              data: {
+                orderId: created.orderId,
+                reason: "Customer cancelled or closed the payment window.",
+              },
+            }).catch(() => {});
+            toast.error("Payment was cancelled. Your order has not been confirmed.");
+          },
+        },
+        handler: async (response: {
+          razorpay_payment_id: string;
+          razorpay_order_id: string;
+          razorpay_signature: string;
+        }) => {
+          try {
+            toast.loading("Verifying payment with bank...", { id: "verify-payment" });
+
+            // 4. Verify cryptographic signature on the backend
+            await verifyAndCapturePaymentFn({
+              data: {
+                orderId: created.orderId,
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpayOrderId: response.razorpay_order_id,
+                razorpaySignature: response.razorpay_signature,
+                paymentMethod: "Razorpay Standard Checkout",
+              },
+            });
+
+            toast.dismiss("verify-payment");
+
+            // 5. Clear cart ONLY after successful cryptographic verification
+            clearCart();
+
+            // 6. Set confirmation
+            setConfirmedOrder({
+              orderId: created.orderId,
+              orderNumber: created.orderNumber,
+              totalRupees: created.totalRupees,
+              email: created.email,
+            });
+
+            setStep(5);
+            toast.success(`Payment verified! Order ${created.orderNumber} confirmed.`);
+          } catch (verifyErr: any) {
+            toast.dismiss("verify-payment");
+            console.error("Payment verification failed:", verifyErr);
+            toast.error(
+              verifyErr?.message || "Payment verification failed. Please contact patron support immediately.",
+            );
+          } finally {
+            setSubmitting(false);
+          }
+        },
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+
+      rzp.on("payment.failed", (failResponse: any) => {
+        setSubmitting(false);
+        const reason = failResponse.error?.description || "Transaction declined by bank or gateway.";
+        recordPaymentFailureFn({
+          data: {
+            orderId: created.orderId,
+            reason,
+            errorCode: failResponse.error?.code,
+          },
+        }).catch(() => {});
+        toast.error(`Payment Failed: ${reason}`);
       });
 
-      // 3. Clear cart in store
-      clearCart();
-
-      // 4. Set confirmation
-      setConfirmedOrder({
-        orderId: created.orderId,
-        orderNumber: created.orderNumber,
-        totalRupees: created.totalRupees,
-        email: created.email,
-      });
-
-      setStep(5);
-      toast.success(`Order ${created.orderNumber} successfully confirmed!`);
+      rzp.open();
     } catch (err: any) {
-      toast.error(err?.message || "Checkout failed. Please review your details.");
-    } finally {
+      console.error("Payment initialization error:", err);
+      toast.error(err?.message || "Checkout failed. Please review your details and try again.");
       setSubmitting(false);
     }
   };
@@ -612,82 +717,67 @@ function CheckoutPage() {
                     <span className="text-[10px] uppercase tracking-[0.25em] text-brand-sage font-medium">
                       Step 4 of 4
                     </span>
-                    <h2 className="font-serif text-3xl text-brand-primary mt-1">Payment Method</h2>
+                    <h2 className="font-serif text-3xl text-brand-primary mt-1">Payment Gateway</h2>
                     <p className="text-xs text-brand-primary/60 mt-1">
-                      Transactions are cryptographically signed and secured via 256-bit encryption.
+                      Authoritative checkout secured by Razorpay with bank-grade 256-bit encryption.
                     </p>
                   </div>
 
-                  <div className="space-y-3">
-                    {/* Razorpay Option */}
-                    <label
-                      onClick={() => setPaymentProvider("RAZORPAY")}
-                      className={`block p-5 border cursor-pointer transition-all ${
-                        paymentProvider === "RAZORPAY"
-                          ? "border-brand-oak bg-brand-cream shadow-sm"
-                          : "border-brand-primary/10 hover:border-brand-primary/30"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="radio"
-                            name="payment"
-                            checked={paymentProvider === "RAZORPAY"}
-                            onChange={() => setPaymentProvider("RAZORPAY")}
-                            className="text-brand-oak accent-brand-oak"
-                          />
-                          <div>
-                            <p className="font-medium text-brand-primary text-sm">
-                              Razorpay (Instant UPI, Cards & Netbanking)
-                            </p>
-                            <p className="text-xs text-brand-primary/60 mt-0.5">
-                              Supports Google Pay, PhonePe, Paytm, BHIM UPI, Visa, Mastercard, RuPay.
-                            </p>
-                          </div>
+                  {/* Unified Razorpay Gateway Card */}
+                  <div className="border border-brand-oak/40 bg-brand-cream/80 p-6 space-y-5 rounded-sm">
+                    <div className="flex items-center justify-between border-b border-brand-primary/10 pb-4">
+                      <div className="flex items-center gap-3">
+                        <ShieldCheck size={24} className="text-brand-oak" />
+                        <div>
+                          <h4 className="font-serif text-base text-brand-primary font-semibold">
+                            Razorpay Unified Checkout
+                          </h4>
+                          <p className="text-xs text-brand-primary/70 mt-0.5">
+                            Official Indian payment gateway with multi-mode settlement.
+                          </p>
                         </div>
-                        <span className="text-xs font-semibold text-brand-oak uppercase tracking-wider">
-                          Recommended
-                        </span>
                       </div>
-                    </label>
+                      <span className="text-[10px] uppercase tracking-widest font-semibold bg-brand-oak/10 text-brand-oak px-2.5 py-1 rounded">
+                        Verified Secure
+                      </span>
+                    </div>
 
-                    {/* Stripe Option */}
-                    <label
-                      onClick={() => setPaymentProvider("STRIPE")}
-                      className={`block p-5 border cursor-pointer transition-all ${
-                        paymentProvider === "STRIPE"
-                          ? "border-brand-oak bg-brand-cream shadow-sm"
-                          : "border-brand-primary/10 hover:border-brand-primary/30"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="radio"
-                            name="payment"
-                            checked={paymentProvider === "STRIPE"}
-                            onChange={() => setPaymentProvider("STRIPE")}
-                            className="text-brand-oak accent-brand-oak"
-                          />
-                          <div>
-                            <p className="font-medium text-brand-primary text-sm">
-                              Credit / Debit Cards (Stripe)
-                            </p>
-                            <p className="text-xs text-brand-primary/60 mt-0.5">
-                              International & Domestic Credit and Debit cards.
-                            </p>
-                          </div>
-                        </div>
-                        <CreditCard size={18} className="text-brand-primary/50" />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div className="p-3 bg-white/60 border border-brand-primary/10 rounded">
+                        <p className="font-medium text-brand-primary">Instant UPI & QR Code</p>
+                        <p className="text-[11px] text-brand-primary/60 mt-0.5">
+                          Google Pay, PhonePe, Paytm, BHIM, and any UPI app.
+                        </p>
                       </div>
-                    </label>
+                      <div className="p-3 bg-white/60 border border-brand-primary/10 rounded">
+                        <p className="font-medium text-brand-primary">Debit & Credit Cards</p>
+                        <p className="text-[11px] text-brand-primary/60 mt-0.5">
+                          Visa, MasterCard, RuPay, Maestro with 3D Secure OTP.
+                        </p>
+                      </div>
+                      <div className="p-3 bg-white/60 border border-brand-primary/10 rounded">
+                        <p className="font-medium text-brand-primary">Net Banking</p>
+                        <p className="text-[11px] text-brand-primary/60 mt-0.5">
+                          50+ Indian banks (SBI, HDFC, ICICI, Axis, Kotak).
+                        </p>
+                      </div>
+                      <div className="p-3 bg-white/60 border border-brand-primary/10 rounded">
+                        <p className="font-medium text-brand-primary">Wallets & PayLater</p>
+                        <p className="text-[11px] text-brand-primary/60 mt-0.5">
+                          Amazon Pay, Mobikwik, Airtel Money, and supported wallets.
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-brand-primary/60 bg-brand-primary/5 p-3 rounded leading-relaxed">
+                      Clicking <strong>&ldquo;Proceed to Secure Payment&rdquo;</strong> will open Razorpay&rsquo;s official checkout modal. Your order is confirmed <strong>only after</strong> successful bank authorization and cryptographic signature verification.
+                    </p>
                   </div>
 
                   <div className="p-4 bg-brand-primary/5 border border-brand-primary/10 text-xs text-brand-primary/70 flex items-center gap-3">
                     <Lock size={18} className="text-brand-oak flex-shrink-0" />
                     <span>
-                      Order total of <strong>{formatRupees(pricing.total)}</strong> will be captured server-side with zero price tampering risk.
+                      Total payable: <strong>{formatRupees(pricing.total)}</strong> (authoritatively calculated on server).
                     </span>
                   </div>
 
@@ -707,7 +797,9 @@ function CheckoutPage() {
                     >
                       <Lock size={14} />
                       <span>
-                        {submitting ? "Processing Payment..." : `Authorize & Pay ${formatRupees(pricing.total)}`}
+                        {submitting
+                          ? "Opening Payment Gateway..."
+                          : `Proceed to Secure Payment (${formatRupees(pricing.total)})`}
                       </span>
                     </PrimaryButton>
                   </div>

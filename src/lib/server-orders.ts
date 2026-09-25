@@ -245,18 +245,12 @@ export const createOrderAndPaymentFn = createServerFn({ method: "POST" })
     const taxCents = Math.round(pricing.tax * 100);
     const totalCents = Math.round(pricing.total * 100);
 
-    // Optional Gateway Order Creation
-    let gatewayOrderId = `TXN-${Date.now()}-${randomSuffix}`;
-    if (paymentProvider === "RAZORPAY") {
-      const razorpayOrder = await createRazorpayOrder({
-        amountCents: totalCents,
-        receipt: orderNumber,
-        notes: { customerId: authUser.id, orderNumber },
-      });
-      if (razorpayOrder) {
-        gatewayOrderId = razorpayOrder.id;
-      }
-    }
+    // Call Razorpay API to create official order on gateway
+    const razorpayOrder = await createRazorpayOrder({
+      amountCents: totalCents,
+      receipt: orderNumber,
+      notes: { customerId: authUser.id, orderNumber },
+    });
 
     // Execute atomic transaction
     const order = await prisma.$transaction(async (tx) => {
@@ -304,11 +298,11 @@ export const createOrderAndPaymentFn = createServerFn({ method: "POST" })
           },
           payments: {
             create: {
-              provider: paymentProvider,
+              provider: "RAZORPAY",
               status: "PENDING",
               amountCents: totalCents,
               currency: "INR",
-              reference: gatewayOrderId,
+              reference: razorpayOrder.id,
             },
           },
         },
@@ -340,23 +334,27 @@ export const createOrderAndPaymentFn = createServerFn({ method: "POST" })
       orderId: order.id,
       orderNumber: order.orderNumber,
       totalRupees: pricing.total,
+      amountPaise: totalCents,
       currency: "INR",
       email: order.email,
-      paymentId: order.payments[0]?.id,
-      paymentReference: order.payments[0]?.reference,
+      phone: order.phone,
+      customerName: name,
+      razorpayOrderId: razorpayOrder.id,
+      razorpayKeyId: process.env.RAZORPAY_KEY_ID || "",
     };
   });
 
 /**
  * Confirms and captures payment using cryptographic signature verification.
+ * Rejects any request without valid Razorpay HMAC-SHA256 signature.
  */
 export const verifyAndCapturePaymentFn = createServerFn({ method: "POST" })
   .validator(
     (d: {
       orderId: string;
-      razorpayPaymentId?: string;
-      razorpayOrderId?: string;
-      razorpaySignature?: string;
+      razorpayPaymentId: string;
+      razorpayOrderId: string;
+      razorpaySignature: string;
       paymentMethod?: string;
     }) => d,
   )
@@ -368,6 +366,10 @@ export const verifyAndCapturePaymentFn = createServerFn({ method: "POST" })
 
     const user = await getUserBySessionToken(token);
     if (!user) throw new Error("Authentication required.");
+
+    if (!orderId || !razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
+      throw new Error("Missing required payment verification parameters from gateway.");
+    }
 
     const order = await prisma.order.findUnique({
       where: { id: orderId },
@@ -381,28 +383,29 @@ export const verifyAndCapturePaymentFn = createServerFn({ method: "POST" })
       throw new Error("Unauthorized access to this order.");
     }
 
+    // Idempotency check: If already paid, do not re-capture or double-decrement stock
     if (order.status === "PAID" || order.status === "PROCESSING" || order.status === "SHIPPED") {
       return { success: true, orderNumber: order.orderNumber, alreadyPaid: true };
     }
 
-    // Cryptographic verification if Razorpay credentials are configured
+    // Cryptographic signature verification with Razorpay Secret
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
-    if (
-      keySecret &&
-      !keySecret.includes("placeholder") &&
-      razorpayPaymentId &&
-      razorpayOrderId &&
-      razorpaySignature
-    ) {
-      const isValid = verifyRazorpayPaymentSignature(
-        razorpayOrderId,
-        razorpayPaymentId,
-        razorpaySignature,
-        keySecret,
+    if (!keySecret) {
+      throw new Error("Payment Gateway Error: Server configuration missing Razorpay Secret Key.");
+    }
+
+    const isValid = verifyRazorpayPaymentSignature(
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
+      keySecret,
+    );
+
+    if (!isValid) {
+      console.error(
+        `Invalid Razorpay signature for order ${order.orderNumber}: ${razorpayOrderId} / ${razorpayPaymentId}`,
       );
-      if (!isValid) {
-        throw new Error("Cryptographic payment verification failed. Untrusted payment payload.");
-      }
+      throw new Error("Payment verification failed: Untrusted cryptographic signature from payment gateway.");
     }
 
     // Atomic stock reduction and status update
@@ -421,8 +424,8 @@ export const verifyAndCapturePaymentFn = createServerFn({ method: "POST" })
           where: { id: order.payments[0].id },
           data: {
             status: "CAPTURED",
-            transactionId: razorpayPaymentId || `TXN-${Date.now()}`,
-            paymentMethod: paymentMethod || "Standard Payment",
+            transactionId: razorpayPaymentId,
+            paymentMethod: paymentMethod || "Razorpay Gateway",
           },
         });
       }
@@ -439,18 +442,34 @@ export const verifyAndCapturePaymentFn = createServerFn({ method: "POST" })
         }
       }
 
-      // 4. Create in-app notification for the customer
+      // 4. Create customer notification
       if (order.userId) {
         await tx.notification.create({
           data: {
             userId: order.userId,
             title: `Order Confirmed: ${order.orderNumber}`,
-            message: `Your payment of ₹${Math.round(order.totalCents / 100)} was successfully received. We are preparing your handcrafted neem rituals.`,
+            message: `Your payment of ₹${Math.round(order.totalCents / 100)} was verified. We are preparing your ritual artifacts.`,
             type: "ORDER",
             link: `/orders/${order.id}`,
           },
         });
       }
+
+      // 5. Create audit log
+      await tx.auditLog.create({
+        data: {
+          adminId: user.id,
+          action: "PAYMENT_CAPTURED",
+          entity: "Order",
+          entityId: order.id,
+          details: {
+            orderNumber: order.orderNumber,
+            razorpayPaymentId,
+            razorpayOrderId,
+            amountPaise: order.totalCents,
+          },
+        },
+      }).catch(() => {});
     });
 
     return {
@@ -458,6 +477,39 @@ export const verifyAndCapturePaymentFn = createServerFn({ method: "POST" })
       orderNumber: order.orderNumber,
       orderId: order.id,
     };
+  });
+
+/**
+ * Records payment failure when customer cancels or bank declines transaction.
+ */
+export const recordPaymentFailureFn = createServerFn({ method: "POST" })
+  .validator((d: { orderId: string; reason?: string; errorCode?: string }) => d)
+  .handler(async ({ data }) => {
+    const { orderId, reason, errorCode } = data;
+    const token = getCookie(SESSION_COOKIE_NAME);
+    if (!token) return { success: false };
+    const user = await getUserBySessionToken(token);
+    if (!user) return { success: false };
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { payments: true },
+    });
+    if (!order || (order.userId !== user.id && user.role !== "ADMIN")) {
+      return { success: false };
+    }
+
+    if (order.payments.length > 0 && order.payments[0].status === "PENDING") {
+      await prisma.payment.update({
+        where: { id: order.payments[0].id },
+        data: {
+          status: "FAILED",
+          errorDetails: reason || errorCode || "Payment cancelled or declined at gateway",
+        },
+      });
+    }
+
+    return { success: true };
   });
 
 /**
