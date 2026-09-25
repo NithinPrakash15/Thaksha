@@ -1,6 +1,6 @@
-import { createFileRoute, redirect, Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { getViewerFn, logoutUserFn } from "@/lib/server-auth";
+import { getViewerFn, logoutUserFn, loginAdminFn, type SafeUser } from "@/lib/server-auth";
 import {
   getAdminMetricsFn,
   getAdminProductsFn,
@@ -44,17 +44,23 @@ import {
   Check,
   RotateCcw,
   Trash2,
+  Lock,
+  ShieldCheck,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 
 export const Route = createFileRoute("/admin")({
   loader: async () => {
-    const user = await getViewerFn().catch(() => null);
-    if (!user || user.role !== "ADMIN") {
-      throw redirect({ to: "/admin-login" });
+    try {
+      const user = await getViewerFn().catch(() => null);
+      if (!user || user.role !== "ADMIN") {
+        return { adminUser: null, initialMetrics: null };
+      }
+      const metrics = await getAdminMetricsFn().catch(() => null);
+      return { adminUser: user, initialMetrics: metrics };
+    } catch {
+      return { adminUser: null, initialMetrics: null };
     }
-    const metrics = await getAdminMetricsFn().catch(() => null);
-    return { adminUser: user, initialMetrics: metrics };
   },
   head: () => ({
     meta: [
@@ -68,9 +74,41 @@ export const Route = createFileRoute("/admin")({
 type AdminTab = "overview" | "products" | "inventory" | "orders" | "customers" | "coupons" | "reviews" | "settings" | "audit";
 
 function AdminDashboardPage() {
-  const { adminUser, initialMetrics } = Route.useLoaderData();
+  const loaderData = Route.useLoaderData();
+  const [currentUser, setCurrentUser] = useState<SafeUser | null>(loaderData?.adminUser || null);
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
-  const [metrics, setMetrics] = useState(initialMetrics);
+  const [metrics, setMetrics] = useState(loaderData?.initialMetrics || null);
+
+  // Embedded Authentication State for Unauthenticated Visitors
+  const [loginEmail, setLoginEmail] = useState("admin@thaksha.com");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+
+  const handleInlineLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError(null);
+    setLoginLoading(true);
+
+    try {
+      const res = await loginAdminFn({
+        data: { email: loginEmail, password: loginPassword },
+      });
+
+      if (res.success && res.user) {
+        toast.success("Administrator credentials verified.");
+        setCurrentUser(res.user);
+        window.dispatchEvent(new Event("thaksha:auth"));
+        const freshMetrics = await getAdminMetricsFn().catch(() => null);
+        setMetrics(freshMetrics);
+      }
+    } catch (err: any) {
+      setLoginError(err?.message || "Invalid credentials.");
+      toast.error(err?.message || "Authentication rejected");
+    } finally {
+      setLoginLoading(false);
+    }
+  };
 
   // Products state
   const [productsData, setProductsData] = useState<{ products: any[]; categories: any[] }>({
@@ -209,8 +247,8 @@ function AdminDashboardPage() {
 
   const handleLogout = async () => {
     await logoutUserFn();
+    setCurrentUser(null);
     toast.success("Admin session terminated.");
-    window.location.href = "/admin-login";
   };
 
   // Create Product handler
@@ -347,6 +385,62 @@ function AdminDashboardPage() {
     return p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.categoryName.toLowerCase().includes(q);
   });
 
+  if (!currentUser || currentUser.role !== "ADMIN") {
+    return (
+      <div className="min-h-screen bg-[#141210] text-[#EFECE6] font-sans flex items-center justify-center p-4">
+        <Toaster richColors position="top-right" />
+        <div className="w-full max-w-md border border-[#2C2825] bg-[#1B1816] p-8 rounded shadow-2xl">
+          <div className="flex items-center gap-2 mb-6">
+            <img src="/thaksha-logo.png" alt="Thaksha" className="h-8 w-8 object-contain" />
+            <span className="font-serif text-2xl font-bold tracking-wider text-[#C59B63] uppercase">Thaksha</span>
+            <span className="text-[10px] uppercase tracking-widest text-[#9D968D] bg-[#2A2521] px-2 py-0.5 rounded border border-[#3E3832] ml-auto">
+              Security Gate
+            </span>
+          </div>
+          <h2 className="font-serif text-3xl text-[#EFECE6] mb-1">Operations Console</h2>
+          <p className="text-xs text-[#9D968D] mb-6">Sign in with administrator credentials to manage your store.</p>
+
+          {loginError && (
+            <div className="mb-4 border border-red-500/30 bg-red-950/20 p-3 text-xs text-red-300 rounded">
+              {loginError}
+            </div>
+          )}
+
+          <form onSubmit={handleInlineLogin} className="space-y-4 text-xs">
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-[#9D968D] mb-1">Admin Email</label>
+              <input
+                required
+                type="email"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                className="w-full border border-[#2C2825] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider text-[#9D968D] mb-1">Password</label>
+              <input
+                required
+                type="password"
+                placeholder="••••••••••••"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                className="w-full border border-[#2C2825] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loginLoading}
+              className="w-full bg-[#C59B63] hover:bg-[#b0874e] text-[#1B1816] py-3 rounded font-semibold uppercase tracking-wider transition-colors disabled:opacity-50 text-xs"
+            >
+              {loginLoading ? "Verifying Session..." : "Enter Operations Console"}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#151311] text-[#EFECE6] font-sans flex flex-col">
       <Toaster richColors position="top-right" />
@@ -374,8 +468,8 @@ function AdminDashboardPage() {
           </Link>
 
           <div className="text-right hidden md:block">
-            <p className="text-xs font-semibold">{adminUser.name}</p>
-            <p className="text-[10px] text-[#9D968D]">{adminUser.email}</p>
+            <p className="text-xs font-semibold">{currentUser.name || "Administrator"}</p>
+            <p className="text-[10px] text-[#9D968D]">{currentUser.email}</p>
           </div>
 
           <button
