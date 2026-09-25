@@ -1,4 +1,21 @@
-# TODO
+# Thaksha Commerce Milestones
 
-- [ ] Fix customer route `/admin` and `/admin-login` to redirect to the separate admin site running at http://10.113.0.114:8081/
-
+- [x] Consolidate fragmented `admin/` subproject into unified first-class `/admin` and `/admin-login` routes.
+- [x] Eliminate hardcoded local LAN IP (`http://10.113.0.114:8081`).
+- [x] Enhance PostgreSQL Prisma schema (`Coupon`, `AuditLog`, `Notification`, `StoreSetting`, `Review`, financial breakdowns, item snapshots).
+- [x] Synchronize and seed Neon database with handcrafted neem creations, coupons, and secure admin account.
+- [x] Cryptographic scrypt password hashing and persistent session management.
+- [x] Connect `/shop`, `/product/$slug`, and `/search` to live PostgreSQL queries.
+- [x] Multi-step checkout with server-side price validation, stock guards, and coupon engine.
+- [x] Order lifecycle tracking (`/orders/$id`) with BlueDart/Delhivery air waybill support.
+- [x] Patron sanctuary account with order history, address management, and wishlist.
+- [x] Secure Admin Console (`/admin`) with real-time analytics, inventory controls, and order dispatch workflow.
+- [x] Dynamic storefront homepage (`/`) backed by live database catalog with responsive collection highlights.
+- [x] Payment webhook integration (`/api/webhooks/payment`) with HMAC-SHA256 signature verification and idempotency locks.
+- [x] In-app notification system with badge alerts and direct navigation for order lifecycle milestones.
+- [x] Patron product review submission modal and administrative moderation interface (Approve, Unapprove, Delete).
+- [x] Dynamic store settings management (Free shipping thresholds, flat delivery rates, contact helplines, announcements).
+- [x] Defense-in-depth HTTP security headers (`nosniff`, `SAMEORIGIN`, `strict-origin-when-cross-origin`, permissions policy).
+- [x] In-memory sliding-window IP rate limiting for authentication and payment endpoints.
+- [x] SEO optimization with structured XML sitemap (`/sitemap.xml`) and crawler protection directives (`/robots.txt`).
+- [x] End-to-end integration test (`prisma/verify_platform.mjs`) validating database, auth, pricing, and reviews.
