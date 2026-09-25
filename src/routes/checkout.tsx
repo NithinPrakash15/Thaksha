@@ -90,13 +90,16 @@ function CheckoutPage() {
           calculateOrderPricingFn({ data: { items: rawCart } }),
         ]);
 
-        if (viewer) {
-          setUser(viewer);
-          setName(viewer.name || "");
-          setEmail(viewer.email || "");
-          setPhone(viewer.phone || "");
+        if (!viewer) {
+          toast.info("Please sign in to your patron account to proceed with checkout.");
+          navigate({ to: "/login", search: { redirect: "/checkout" } });
+          return;
         }
 
+        setUser(viewer);
+        setName(viewer.name || "");
+        setEmail(viewer.email || "");
+        setPhone(viewer.phone || "");
         setPricing(calc);
       } catch (err: any) {
         toast.error(err?.message || "Failed to load checkout pricing.");

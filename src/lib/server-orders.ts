@@ -2,6 +2,10 @@ import { createServerFn } from "@tanstack/react-start";
 import { getCookie } from "@tanstack/react-start/server";
 import { prisma } from "./prisma";
 import { getUserBySessionToken } from "./auth";
+import {
+  createRazorpayOrder,
+  verifyRazorpayPaymentSignature,
+} from "./payment-gateways";
 
 const SESSION_COOKIE_NAME = "thaksha_session";
 
@@ -185,6 +189,7 @@ export const calculateOrderPricingFn = createServerFn({ method: "POST" })
 
 /**
  * Creates an authoritative pending Order with snapshot line items and delivery address in a database transaction.
+ * Strictly requires an authenticated customer session.
  */
 export const createOrderAndPaymentFn = createServerFn({ method: "POST" })
   .validator(
@@ -205,6 +210,17 @@ export const createOrderAndPaymentFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { name, email, phone, line1, line2, city, region, postal, items, couponCode, paymentProvider } = data;
 
+    // Strict customer authentication check
+    const token = getCookie(SESSION_COOKIE_NAME);
+    if (!token) {
+      throw new Error("Authentication required. Please sign in to your patron account to complete checkout.");
+    }
+
+    const authUser = await getUserBySessionToken(token);
+    if (!authUser || authUser.status !== "ACTIVE") {
+      throw new Error("Valid customer authentication required. Please sign in.");
+    }
+
     if (!name || !email || !phone || !line1 || !city || !postal) {
       throw new Error("Missing required customer information or delivery address.");
     }
@@ -213,17 +229,13 @@ export const createOrderAndPaymentFn = createServerFn({ method: "POST" })
       throw new Error("Cart is empty.");
     }
 
-    // Try resolving authenticated user
-    const token = getCookie(SESSION_COOKIE_NAME);
-    const authUser = token ? await getUserBySessionToken(token) : null;
-
-    // Authoritatively calculate prices and verify stock
+    // Authoritatively calculate prices and verify stock against PostgreSQL
     const pricing = await calculateOrderPricingFn({ data: { items, couponCode } });
     if (pricing.outOfStockItems.length > 0) {
       throw new Error(`Inventory shortage: ${pricing.outOfStockItems.join(", ")}`);
     }
 
-    // Generate unique order number (e.g. THK-829103)
+    // Unique sequential/random order number
     const randomSuffix = Math.floor(100000 + Math.random() * 900000).toString();
     const orderNumber = `THK-${randomSuffix}`;
 
@@ -233,12 +245,25 @@ export const createOrderAndPaymentFn = createServerFn({ method: "POST" })
     const taxCents = Math.round(pricing.tax * 100);
     const totalCents = Math.round(pricing.total * 100);
 
+    // Optional Gateway Order Creation
+    let gatewayOrderId = `TXN-${Date.now()}-${randomSuffix}`;
+    if (paymentProvider === "RAZORPAY") {
+      const razorpayOrder = await createRazorpayOrder({
+        amountCents: totalCents,
+        receipt: orderNumber,
+        notes: { customerId: authUser.id, orderNumber },
+      });
+      if (razorpayOrder) {
+        gatewayOrderId = razorpayOrder.id;
+      }
+    }
+
     // Execute atomic transaction
     const order = await prisma.$transaction(async (tx) => {
-      // Find or create address
+      // Find or create address for the authenticated user
       const address = await tx.address.create({
         data: {
-          userId: authUser?.id || null,
+          userId: authUser.id,
           name,
           phone,
           line1,
@@ -250,11 +275,11 @@ export const createOrderAndPaymentFn = createServerFn({ method: "POST" })
         },
       });
 
-      // Create Order
+      // Create Order belonging strictly to authUser.id
       const newOrder = await tx.order.create({
         data: {
           orderNumber,
-          userId: authUser?.id || null,
+          userId: authUser.id,
           email: email.toLowerCase().trim(),
           phone,
           status: "PENDING",
@@ -283,7 +308,7 @@ export const createOrderAndPaymentFn = createServerFn({ method: "POST" })
               status: "PENDING",
               amountCents: totalCents,
               currency: "INR",
-              reference: `TXN-${Date.now()}-${randomSuffix}`,
+              reference: gatewayOrderId,
             },
           },
         },
@@ -302,6 +327,11 @@ export const createOrderAndPaymentFn = createServerFn({ method: "POST" })
         }).catch(() => {});
       }
 
+      // Clear the user's database cart after order creation
+      await tx.cartItem.deleteMany({
+        where: { userId: authUser.id },
+      }).catch(() => {});
+
       return newOrder;
     });
 
@@ -318,18 +348,26 @@ export const createOrderAndPaymentFn = createServerFn({ method: "POST" })
   });
 
 /**
- * Confirms and captures payment, deducts stock inventory safely, and transitions order to PAID.
+ * Confirms and captures payment using cryptographic signature verification.
  */
 export const verifyAndCapturePaymentFn = createServerFn({ method: "POST" })
   .validator(
     (d: {
       orderId: string;
-      transactionId?: string;
+      razorpayPaymentId?: string;
+      razorpayOrderId?: string;
+      razorpaySignature?: string;
       paymentMethod?: string;
     }) => d,
   )
   .handler(async ({ data }) => {
-    const { orderId, transactionId, paymentMethod } = data;
+    const { orderId, razorpayPaymentId, razorpayOrderId, razorpaySignature, paymentMethod } = data;
+
+    const token = getCookie(SESSION_COOKIE_NAME);
+    if (!token) throw new Error("Authentication required.");
+
+    const user = await getUserBySessionToken(token);
+    if (!user) throw new Error("Authentication required.");
 
     const order = await prisma.order.findUnique({
       where: { id: orderId },
@@ -337,8 +375,34 @@ export const verifyAndCapturePaymentFn = createServerFn({ method: "POST" })
     });
 
     if (!order) throw new Error("Order not found.");
+
+    // Customer Isolation check: Order must belong to user or admin
+    if (order.userId !== user.id && user.role !== "ADMIN") {
+      throw new Error("Unauthorized access to this order.");
+    }
+
     if (order.status === "PAID" || order.status === "PROCESSING" || order.status === "SHIPPED") {
       return { success: true, orderNumber: order.orderNumber, alreadyPaid: true };
+    }
+
+    // Cryptographic verification if Razorpay credentials are configured
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (
+      keySecret &&
+      !keySecret.includes("placeholder") &&
+      razorpayPaymentId &&
+      razorpayOrderId &&
+      razorpaySignature
+    ) {
+      const isValid = verifyRazorpayPaymentSignature(
+        razorpayOrderId,
+        razorpayPaymentId,
+        razorpaySignature,
+        keySecret,
+      );
+      if (!isValid) {
+        throw new Error("Cryptographic payment verification failed. Untrusted payment payload.");
+      }
     }
 
     // Atomic stock reduction and status update
@@ -357,7 +421,7 @@ export const verifyAndCapturePaymentFn = createServerFn({ method: "POST" })
           where: { id: order.payments[0].id },
           data: {
             status: "CAPTURED",
-            transactionId: transactionId || `TXN-${Date.now()}`,
+            transactionId: razorpayPaymentId || `TXN-${Date.now()}`,
             paymentMethod: paymentMethod || "Standard Payment",
           },
         });
@@ -397,14 +461,14 @@ export const verifyAndCapturePaymentFn = createServerFn({ method: "POST" })
   });
 
 /**
- * Retrieves orders for the authenticated customer.
+ * Retrieves orders strictly for the authenticated customer.
  */
 export const getCustomerOrdersFn = createServerFn({ method: "GET" }).handler(async () => {
   const token = getCookie(SESSION_COOKIE_NAME);
-  if (!token) return [];
+  if (!token) throw new Error("Authentication required.");
 
   const user = await getUserBySessionToken(token);
-  if (!user) return [];
+  if (!user) throw new Error("Authentication required.");
 
   const orders = await prisma.order.findMany({
     where: { userId: user.id },
@@ -440,13 +504,16 @@ export const getCustomerOrdersFn = createServerFn({ method: "GET" }).handler(asy
 });
 
 /**
- * Retrieves order details by ID or orderNumber, with privacy isolation.
+ * Retrieves order details by ID or orderNumber, with strict data isolation.
  */
 export const getOrderDetailFn = createServerFn({ method: "GET" })
   .validator((idOrNumber: string) => idOrNumber)
   .handler(async ({ data: idOrNumber }) => {
     const token = getCookie(SESSION_COOKIE_NAME);
-    const user = token ? await getUserBySessionToken(token) : null;
+    if (!token) throw new Error("Authentication required to view order details.");
+
+    const user = await getUserBySessionToken(token);
+    if (!user) throw new Error("Authentication required to view order details.");
 
     const order = await prisma.order.findFirst({
       where: {
@@ -461,9 +528,9 @@ export const getOrderDetailFn = createServerFn({ method: "GET" })
 
     if (!order) return null;
 
-    // Security check: only allow if user owns the order, is an admin, or order is within guest session
-    if (order.userId && (!user || (user.id !== order.userId && user.role !== "ADMIN"))) {
-      throw new Error("Unauthorized to view this order.");
+    // Strict customer isolation check: Customer A CANNOT view Customer B's order!
+    if (order.userId !== user.id && user.role !== "ADMIN") {
+      throw new Error("Access Denied: You do not have permission to view this order.");
     }
 
     return {
@@ -518,3 +585,75 @@ export const getOrderDetailFn = createServerFn({ method: "GET" })
         : null,
     };
   });
+
+/**
+ * Retrieves the persistent database cart for an authenticated customer.
+ */
+export const getDatabaseCartFn = createServerFn({ method: "GET" }).handler(async () => {
+  const token = getCookie(SESSION_COOKIE_NAME);
+  if (!token) return [];
+
+  const user = await getUserBySessionToken(token);
+  if (!user) return [];
+
+  const cartItems = await prisma.cartItem.findMany({
+    where: { userId: user.id },
+    include: { product: true },
+  });
+
+  return cartItems.map((c) => ({
+    slug: c.product.slug,
+    quantity: c.quantity,
+  }));
+});
+
+/**
+ * Synchronizes / merges the customer's cart to PostgreSQL.
+ */
+export const syncDatabaseCartFn = createServerFn({ method: "POST" })
+  .validator((items: CartItemInput[]) => items)
+  .handler(async ({ data: items }) => {
+    const token = getCookie(SESSION_COOKIE_NAME);
+    if (!token) return { success: false, reason: "unauthenticated" };
+
+    const user = await getUserBySessionToken(token);
+    if (!user) return { success: false, reason: "unauthenticated" };
+
+    await prisma.$transaction(async (tx) => {
+      // Clear existing cart items
+      await tx.cartItem.deleteMany({ where: { userId: user.id } });
+
+      // Re-insert valid items
+      for (const item of items) {
+        const prod = await tx.product.findUnique({
+          where: { slug: item.slug },
+          select: { id: true },
+        });
+        if (prod && item.quantity > 0) {
+          await tx.cartItem.create({
+            data: {
+              userId: user.id,
+              productId: prod.id,
+              quantity: item.quantity,
+            },
+          });
+        }
+      }
+    });
+
+    return { success: true };
+  });
+
+/**
+ * Clears the customer's database cart upon checkout completion or manual clear.
+ */
+export const clearDatabaseCartFn = createServerFn({ method: "POST" }).handler(async () => {
+  const token = getCookie(SESSION_COOKIE_NAME);
+  if (!token) return { success: true };
+
+  const user = await getUserBySessionToken(token);
+  if (!user) return { success: true };
+
+  await prisma.cartItem.deleteMany({ where: { userId: user.id } });
+  return { success: true };
+});

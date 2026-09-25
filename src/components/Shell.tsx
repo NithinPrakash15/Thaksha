@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Search, ShoppingBag, UserRound, Shield, LogOut, Bell, Check, Package } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Toaster, toast } from "sonner";
-import { getCart } from "@/lib/store";
+import { getCart, hydrateCustomerCart } from "@/lib/store";
 import { getViewerFn, logoutUserFn, type SafeUser } from "@/lib/server-auth";
 import { getUserNotificationsFn, markNotificationReadFn, type NotificationItem } from "@/lib/notifications";
 
@@ -24,6 +24,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         const viewer = await getViewerFn();
         setUser(viewer);
         if (viewer) {
+          hydrateCustomerCart();
           const notes = await getUserNotificationsFn();
           setNotifications(notes);
         } else {
@@ -96,15 +97,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
       {/* Top Announcement Bar */}
       <div className="bg-brand-primary text-brand-cream px-4 py-2 text-center text-[10px] uppercase tracking-[0.25em] font-medium flex items-center justify-center gap-4">
         <span>Complimentary express shipping across India on orders above ₹4,999</span>
-        {user?.role === "ADMIN" && (
-          <Link
-            to="/admin"
-            className="hidden sm:inline-flex items-center gap-1 bg-brand-oak/40 px-2 py-0.5 rounded text-[9px] hover:bg-brand-oak transition-colors text-white"
-          >
-            <Shield size={10} />
-            <span>Admin Console</span>
-          </Link>
-        )}
       </div>
 
       {showIntro ? (
@@ -144,12 +136,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <Link to={user ? "/account" : "/login"} className="hover:text-brand-oak transition-colors">
             {user ? "My Sanctuary" : "Patron Sign In"}
           </Link>
-          {user?.role === "ADMIN" && (
-            <Link to="/admin" className="text-brand-oak font-semibold flex items-center gap-1 hover:underline">
-              <Shield size={12} />
-              Admin
-            </Link>
-          )}
         </div>
 
         <div className="flex items-center gap-2 md:gap-3 relative">
@@ -281,9 +267,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </Link>
           </div>
           <div className="space-y-3 text-sm text-brand-cream/70">
-            <p className="text-[10px] uppercase tracking-[0.25em] text-brand-sage">Security & Admin</p>
-            <Link to="/admin-login" className="block hover:text-brand-oak">
-              Operations Portal
+            <p className="text-[10px] uppercase tracking-[0.25em] text-brand-sage">Ritual & Care</p>
+            <Link to="/about" className="block hover:text-brand-oak">
+              The Craft of Neem
             </Link>
             <Link to="/login" className="block hover:text-brand-oak">
               Patron Sign In

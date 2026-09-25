@@ -22,7 +22,7 @@ export const Route = createFileRoute("/account")({
   loader: async () => {
     const user = await getViewerFn().catch(() => null);
     if (!user) {
-      throw redirect({ to: "/login" });
+      throw redirect({ to: "/login", search: { redirect: "/account" } });
     }
     const orders = await getCustomerOrdersFn().catch(() => []);
     return { user, orders };

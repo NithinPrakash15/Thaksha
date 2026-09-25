@@ -5,8 +5,12 @@ import {
   hashPassword,
   verifyPassword,
   createSession,
+  rotateSession,
   getUserBySessionToken,
   destroySession,
+  checkRateLimit,
+  recordAuthAttempt,
+  verifyGoogleToken,
 } from "./auth";
 
 const SESSION_COOKIE_NAME = "thaksha_session";
@@ -18,6 +22,8 @@ export type SafeUser = {
   name: string | null;
   phone: string | null;
   role: "CUSTOMER" | "ADMIN" | "SUPPORT";
+  provider: "LOCAL" | "GOOGLE";
+  avatarUrl: string | null;
   createdAt: string;
 };
 
@@ -29,7 +35,7 @@ export const getViewerFn = createServerFn({ method: "GET" }).handler(async () =>
   if (!token) return null;
 
   const user = await getUserBySessionToken(token);
-  if (!user) return null;
+  if (!user || user.status === "LOCKED" || user.status === "SUSPENDED") return null;
 
   return {
     id: user.id,
@@ -37,12 +43,14 @@ export const getViewerFn = createServerFn({ method: "GET" }).handler(async () =>
     name: user.name,
     phone: user.phone,
     role: user.role,
+    provider: user.provider,
+    avatarUrl: user.avatarUrl,
     createdAt: user.createdAt.toISOString(),
   } as SafeUser;
 });
 
 /**
- * Logs in a customer or admin.
+ * Logs in a customer with email and password, protected by rate limiting.
  */
 export const loginCustomerFn = createServerFn({ method: "POST" })
   .validator((d: { email: string; password: string }) => d)
@@ -54,20 +62,40 @@ export const loginCustomerFn = createServerFn({ method: "POST" })
       throw new Error("Email and password are required.");
     }
 
+    // Rate-limiting check
+    const rateCheck = checkRateLimit(email);
+    if (rateCheck.isLocked) {
+      throw new Error(
+        `Too many failed attempts. Account temporarily locked for security. Please try again in ${rateCheck.waitMinutes} minutes.`,
+      );
+    }
+
     const user = await prisma.user.findUnique({
       where: { email },
     });
 
-    if (!user || !user.passwordHash) {
+    if (!user || !user.passwordHash || user.status !== "ACTIVE") {
+      recordAuthAttempt(email, false);
       throw new Error("Invalid email or password.");
     }
 
     const isValid = verifyPassword(password, user.passwordHash);
     if (!isValid) {
+      recordAuthAttempt(email, false);
       throw new Error("Invalid email or password.");
     }
 
-    const { token } = await createSession(user.id);
+    // Success - clear failed attempts
+    recordAuthAttempt(email, true);
+
+    const oldToken = getCookie(SESSION_COOKIE_NAME) || null;
+    const { token } = await rotateSession(oldToken, user.id);
+
+    // Update last login
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
 
     setCookie(SESSION_COOKIE_NAME, token, {
       httpOnly: true,
@@ -84,6 +112,86 @@ export const loginCustomerFn = createServerFn({ method: "POST" })
         email: user.email,
         name: user.name,
         role: user.role,
+        provider: user.provider,
+        avatarUrl: user.avatarUrl,
+      },
+    };
+  });
+
+/**
+ * Verifies Google ID token server-side and logs in or creates the customer account.
+ */
+export const loginWithGoogleFn = createServerFn({ method: "POST" })
+  .validator((d: { credential: string }) => d)
+  .handler(async ({ data }) => {
+    const { credential } = data;
+    if (!credential) {
+      throw new Error("Google credential is required.");
+    }
+
+    // Server-side verification with Google
+    const googlePayload = await verifyGoogleToken(credential);
+
+    // Find existing user by googleId or email
+    let user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { googleId: googlePayload.sub },
+          { email: googlePayload.email },
+        ],
+      },
+    });
+
+    if (user) {
+      if (user.status !== "ACTIVE") {
+        throw new Error("This account is currently suspended.");
+      }
+
+      // Link googleId and avatar if not already set
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          googleId: user.googleId || googlePayload.sub,
+          avatarUrl: user.avatarUrl || googlePayload.picture,
+          lastLoginAt: new Date(),
+        },
+      });
+    } else {
+      // Create new customer account
+      user = await prisma.user.create({
+        data: {
+          email: googlePayload.email,
+          name: googlePayload.name,
+          googleId: googlePayload.sub,
+          avatarUrl: googlePayload.picture,
+          provider: "GOOGLE",
+          status: "ACTIVE",
+          role: "CUSTOMER",
+          lastLoginAt: new Date(),
+        },
+      });
+    }
+
+    const oldToken = getCookie(SESSION_COOKIE_NAME) || null;
+    const { token } = await rotateSession(oldToken, user.id);
+
+    setCookie(SESSION_COOKIE_NAME, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: COOKIE_MAX_AGE,
+      secure: process.env.NODE_ENV === "production",
+    });
+
+    return {
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        provider: user.provider,
+        avatarUrl: user.avatarUrl,
       },
     };
   });
@@ -118,7 +226,7 @@ export const registerCustomerFn = createServerFn({ method: "POST" })
     if (existing) {
       user = await prisma.user.update({
         where: { id: existing.id },
-        data: { name, phone, passwordHash, role: "CUSTOMER" },
+        data: { name, phone, passwordHash, role: "CUSTOMER", lastLoginAt: new Date() },
       });
     } else {
       user = await prisma.user.create({
@@ -127,12 +235,16 @@ export const registerCustomerFn = createServerFn({ method: "POST" })
           email,
           phone,
           passwordHash,
+          provider: "LOCAL",
+          status: "ACTIVE",
           role: "CUSTOMER",
+          lastLoginAt: new Date(),
         },
       });
     }
 
-    const { token } = await createSession(user.id);
+    const oldToken = getCookie(SESSION_COOKIE_NAME) || null;
+    const { token } = await rotateSession(oldToken, user.id);
 
     setCookie(SESSION_COOKIE_NAME, token, {
       httpOnly: true,
@@ -149,12 +261,14 @@ export const registerCustomerFn = createServerFn({ method: "POST" })
         email: user.email,
         name: user.name,
         role: user.role,
+        provider: user.provider,
+        avatarUrl: user.avatarUrl,
       },
     };
   });
 
 /**
- * Admin portal login with explicit role enforcement.
+ * Admin portal login with strict role enforcement and audit logging.
  */
 export const loginAdminFn = createServerFn({ method: "POST" })
   .validator((d: { email: string; password: string }) => d)
@@ -166,20 +280,38 @@ export const loginAdminFn = createServerFn({ method: "POST" })
       throw new Error("Email and password are required.");
     }
 
+    const rateCheck = checkRateLimit(email);
+    if (rateCheck.isLocked) {
+      throw new Error(
+        `Too many administrative authentication attempts. Access locked for ${rateCheck.waitMinutes} minutes.`,
+      );
+    }
+
     const user = await prisma.user.findUnique({
       where: { email },
     });
 
-    if (!user || user.role !== "ADMIN" || !user.passwordHash) {
+    if (!user || user.role !== "ADMIN" || !user.passwordHash || user.status !== "ACTIVE") {
+      recordAuthAttempt(email, false);
       throw new Error("Invalid credentials or unauthorized administrative access.");
     }
 
     const isValid = verifyPassword(password, user.passwordHash);
     if (!isValid) {
+      recordAuthAttempt(email, false);
       throw new Error("Invalid credentials or unauthorized administrative access.");
     }
 
-    const { token } = await createSession(user.id);
+    recordAuthAttempt(email, true);
+
+    const oldToken = getCookie(SESSION_COOKIE_NAME) || null;
+    const { token } = await rotateSession(oldToken, user.id);
+
+    // Update last login
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
 
     setCookie(SESSION_COOKIE_NAME, token, {
       httpOnly: true,
@@ -207,6 +339,8 @@ export const loginAdminFn = createServerFn({ method: "POST" })
         email: user.email,
         name: user.name,
         role: user.role,
+        provider: user.provider,
+        avatarUrl: user.avatarUrl,
       },
     };
   });

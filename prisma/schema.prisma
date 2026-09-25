@@ -13,10 +13,16 @@ model User {
   name          String?
   phone         String?
   passwordHash  String?
+  googleId      String?        @unique
+  avatarUrl     String?
+  provider      AuthProvider   @default(LOCAL)
+  status        AccountStatus  @default(ACTIVE)
   role          Role           @default(CUSTOMER)
+  lastLoginAt   DateTime?
   orders        Order[]
   addresses     Address[]
   wishlist      WishlistItem[]
+  cartItems     CartItem[]
   reviews       Review[]
   sessions      Session[]
   notifications Notification[]
@@ -25,8 +31,24 @@ model User {
   updatedAt     DateTime       @updatedAt
 
   @@index([email])
+  @@index([googleId])
   @@index([role])
 }
+
+model CartItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, productId])
+  @@index([userId])
+}
+
 
 model Product {
   id                  String           @id @default(cuid())
@@ -49,6 +71,7 @@ model Product {
   reviews             Review[]
   orderItems          OrderItem[]
   wishlist            WishlistItem[]
+  cartItems           CartItem[]
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
@@ -329,3 +352,15 @@ enum NotificationType {
   INVENTORY
   SYSTEM
 }
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  LOCKED
+}
+

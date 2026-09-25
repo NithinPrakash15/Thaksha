@@ -5,6 +5,59 @@ import type { Role, User } from "@prisma/client";
 const SESSION_COOKIE_NAME = "thaksha_session";
 const SESSION_EXPIRY_DAYS = 30;
 
+// Rate limiting state for brute-force protection
+type AttemptRecord = { count: number; firstAttempt: number; lockedUntil?: number };
+const loginAttempts = new Map<string, AttemptRecord>();
+const MAX_FAILED_ATTEMPTS = 5;
+const RATE_WINDOW_MS = 15 * 60 * 1000; // 15 mins
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 mins lock
+
+/**
+ * Checks if an IP or email identifier is currently locked out.
+ */
+export function checkRateLimit(key: string): { isLocked: boolean; waitMinutes?: number } {
+  const normalizedKey = key.toLowerCase().trim();
+  const record = loginAttempts.get(normalizedKey);
+  if (!record) return { isLocked: false };
+
+  const now = Date.now();
+  if (record.lockedUntil && record.lockedUntil > now) {
+    const waitMinutes = Math.ceil((record.lockedUntil - now) / 60000);
+    return { isLocked: true, waitMinutes };
+  }
+
+  // Clear expired window
+  if (now - record.firstAttempt > RATE_WINDOW_MS) {
+    loginAttempts.delete(normalizedKey);
+    return { isLocked: false };
+  }
+
+  return { isLocked: false };
+}
+
+/**
+ * Registers an authentication attempt. Resets on success; locks on threshold breach.
+ */
+export function recordAuthAttempt(key: string, success: boolean): void {
+  const normalizedKey = key.toLowerCase().trim();
+  if (success) {
+    loginAttempts.delete(normalizedKey);
+    return;
+  }
+
+  const now = Date.now();
+  const record = loginAttempts.get(normalizedKey);
+
+  if (!record || now - record.firstAttempt > RATE_WINDOW_MS) {
+    loginAttempts.set(normalizedKey, { count: 1, firstAttempt: now });
+  } else {
+    record.count += 1;
+    if (record.count >= MAX_FAILED_ATTEMPTS) {
+      record.lockedUntil = now + LOCKOUT_DURATION_MS;
+    }
+  }
+}
+
 /**
  * Hashes password using Node.js scrypt with a random 16-byte salt.
  */
@@ -46,6 +99,19 @@ export async function createSession(userId: string): Promise<{ token: string; ex
   });
 
   return { token: rawToken, expiresAt };
+}
+
+/**
+ * Rotates an existing session to prevent session fixation.
+ */
+export async function rotateSession(
+  oldRawToken: string | null,
+  userId: string,
+): Promise<{ token: string; expiresAt: Date }> {
+  if (oldRawToken) {
+    await destroySession(oldRawToken);
+  }
+  return createSession(userId);
 }
 
 /**
@@ -133,4 +199,48 @@ export async function getSessionAdmin(request: Request): Promise<User | null> {
   const user = await getSessionUser(request);
   if (!user || user.role !== "ADMIN") return null;
   return user;
+}
+
+export type GoogleUserPayload = {
+  sub: string;
+  email: string;
+  email_verified: boolean;
+  name: string;
+  picture?: string;
+};
+
+/**
+ * Server-side verification of Google Identity Services ID Token / Credential.
+ */
+export async function verifyGoogleToken(idToken: string): Promise<GoogleUserPayload> {
+  if (!idToken || typeof idToken !== "string") {
+    throw new Error("Google credential token is required.");
+  }
+
+  const res = await fetch(
+    `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
+  );
+
+  if (!res.ok) {
+    throw new Error("Google authentication rejected by Google Identity Services.");
+  }
+
+  const data = await res.json();
+
+  if (!data.sub || !data.email) {
+    throw new Error("Invalid Google identity payload.");
+  }
+
+  const isVerified = data.email_verified === "true" || data.email_verified === true;
+  if (!isVerified) {
+    throw new Error("Google account email is not verified.");
+  }
+
+  return {
+    sub: data.sub,
+    email: data.email.toLowerCase().trim(),
+    email_verified: true,
+    name: data.name || data.email.split("@")[0],
+    picture: data.picture,
+  };
 }
