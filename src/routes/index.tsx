@@ -29,7 +29,7 @@ export const Route = createFileRoute("/")({
       },
       {
         property: "og:image",
-        content: "https://thaksha-nithin23.vercel.app/og-hero.jpg",
+        content: "https://thakshastore.com/og-hero.jpg",
       },
     ],
     scripts: [

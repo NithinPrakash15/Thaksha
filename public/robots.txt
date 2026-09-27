@@ -5,4 +5,4 @@ Disallow: /admin-login
 Disallow: /api/
 Disallow: /orders/
 
-Sitemap: https://thaksha.com/sitemap.xml
+Sitemap: https://thakshastore.com/sitemap.xml
