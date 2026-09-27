@@ -243,22 +243,10 @@ async function main() {
     },
   });
 
-  // 4. Default Admin User
-  const adminPasswordHash = hashPassword("AdminPassword@2026");
-  const admin = await prisma.user.upsert({
-    where: { email: "admin@thaksha.com" },
-    update: {
-      name: "Thaksha Administrator",
-      role: "ADMIN",
-      passwordHash: adminPasswordHash,
-    },
-    create: {
-      email: "admin@thaksha.com",
-      name: "Thaksha Administrator",
-      role: "ADMIN",
-      passwordHash: adminPasswordHash,
-    },
-  });
+  // 4. Note on Administrator Account
+  // For production security, no default admin credentials are seeded.
+  // The business owner creates their own administrator credentials via the secure first-time setup flow at /admin.
+
 
   // 5. Default Customer User
   const customerPasswordHash = hashPassword("Customer@2026");
@@ -308,7 +296,7 @@ async function main() {
     },
   });
 
-  console.log("Seeding complete! Admin user: admin@thaksha.com (Password: AdminPassword@2026)");
+  console.log("Seeding complete! Admin account is securely initialized via first-time setup at /admin.");
 }
 
 main()

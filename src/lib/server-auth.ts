@@ -338,9 +338,11 @@ export const loginAdminFn = createServerFn({ method: "POST" })
         id: user.id,
         email: user.email,
         name: user.name,
+        phone: user.phone,
         role: user.role,
         provider: user.provider,
         avatarUrl: user.avatarUrl,
+        createdAt: user.createdAt.toISOString(),
       },
     };
   });

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { ShieldCheck, Mail, Lock, User, Phone, ArrowRight } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
     redirect: typeof search.redirect === "string" ? search.redirect : undefined,
   }),
   head: () => ({

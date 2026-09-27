@@ -268,9 +268,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="space-y-3 text-sm text-brand-cream/70">
             <p className="text-[10px] uppercase tracking-[0.25em] text-brand-sage">Ritual & Care</p>
-            <Link to="/about" className="block hover:text-brand-oak">
+            <a href="/#craft" className="block hover:text-brand-oak">
               The Craft of Neem
-            </Link>
+            </a>
             <Link to="/login" className="block hover:text-brand-oak">
               Patron Sign In
             </Link>

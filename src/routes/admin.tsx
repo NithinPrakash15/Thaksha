@@ -18,6 +18,15 @@ import {
   getAdminStoreSettingsFn,
   updateAdminStoreSettingFn,
 } from "@/lib/server-admin";
+import {
+  checkAdminSetupStatusFn,
+  initialAdminSetupFn,
+  adminChangePasswordFn,
+  adminChangeEmailFn,
+  adminRequestPasswordResetFn,
+  adminResetPasswordWithTokenFn,
+  adminTerminateOtherSessionsFn,
+} from "@/lib/server-admin-auth";
 import { formatRupees } from "@/lib/server-products";
 import {
   LayoutDashboard,
@@ -46,6 +55,11 @@ import {
   Trash2,
   Lock,
   ShieldCheck,
+  KeyRound,
+  XCircle,
+  Mail,
+  User,
+  Sparkles,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 
@@ -71,7 +85,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminDashboardPage,
 });
 
-type AdminTab = "overview" | "products" | "inventory" | "orders" | "customers" | "coupons" | "reviews" | "settings" | "audit";
+type AdminTab = "overview" | "products" | "inventory" | "orders" | "customers" | "coupons" | "reviews" | "settings" | "security" | "audit";
 
 function AdminDashboardPage() {
   const loaderData = Route.useLoaderData();
@@ -79,11 +93,75 @@ function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
   const [metrics, setMetrics] = useState(loaderData?.initialMetrics || null);
 
-  // Embedded Authentication State for Unauthenticated Visitors
-  const [loginEmail, setLoginEmail] = useState("admin@thaksha.com");
+  // Security Gate State (When Unauthenticated)
+  const [setupNeeded, setSetupNeeded] = useState(false);
+  const [authGateMode, setAuthGateMode] = useState<"login" | "setup" | "forgot" | "reset">("login");
+
+  // Inline Login Credentials (Zero default credentials)
+  const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+
+  // First-Time Setup State
+  const [setupName, setSetupName] = useState("");
+  const [setupEmail, setSetupEmail] = useState("");
+  const [setupPassword, setSetupPassword] = useState("");
+  const [setupConfirm, setSetupConfirm] = useState("");
+  const [setupLoading, setSetupLoading] = useState(false);
+  const [setupError, setSetupError] = useState<string | null>(null);
+
+  // Forgot Password Gate State
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSuccess, setForgotSuccess] = useState<string | null>(null);
+  const [forgotError, setForgotError] = useState<string | null>(null);
+
+  // Reset With Token Gate State
+  const [resetToken, setResetToken] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetConfirm, setResetConfirm] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+
+  // Account & Security Tab State (When Logged In)
+  const [currPassword, setCurrPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [pwdLoading, setPwdLoading] = useState(false);
+  const [pwdError, setPwdError] = useState<string | null>(null);
+  const [pwdSuccess, setPwdSuccess] = useState<string | null>(null);
+
+  const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [emailConfirmPassword, setEmailConfirmPassword] = useState("");
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailSuccess, setEmailSuccess] = useState<string | null>(null);
+
+  const [terminatingSessions, setTerminatingSessions] = useState(false);
+
+  // Evaluate password complexity
+  const evalStrength = (pwd: string) => ({
+    minLength: pwd.length >= 12,
+    hasUpper: /[A-Z]/.test(pwd),
+    hasLower: /[a-z]/.test(pwd),
+    hasNumber: /[0-9]/.test(pwd),
+    hasSpecial: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(pwd),
+  });
+
+  // Query setup status on mount if unauthenticated
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== "ADMIN") {
+      checkAdminSetupStatusFn()
+        .then((res) => {
+          setSetupNeeded(res.setupNeeded);
+          if (res.setupNeeded) {
+            setAuthGateMode("setup");
+          }
+        })
+        .catch(() => {});
+    }
+  }, [currentUser]);
 
   const handleInlineLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,6 +185,166 @@ function AdminDashboardPage() {
       toast.error(err?.message || "Authentication rejected");
     } finally {
       setLoginLoading(false);
+    }
+  };
+
+  const handleInitialSetup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSetupError(null);
+    const str = evalStrength(setupPassword);
+    if (!str.minLength || !str.hasUpper || !str.hasLower || !str.hasNumber || !str.hasSpecial) {
+      setSetupError("Password does not meet the minimum 12-character complexity requirement.");
+      return;
+    }
+    if (setupPassword !== setupConfirm) {
+      setSetupError("Password confirmation does not match.");
+      return;
+    }
+    setSetupLoading(true);
+    try {
+      const res = await initialAdminSetupFn({
+        data: {
+          name: setupName,
+          email: setupEmail,
+          password: setupPassword,
+          confirmPassword: setupConfirm,
+        },
+      });
+      if (res.success && res.user) {
+        toast.success("Master administrator account initialized successfully.");
+        setCurrentUser(res.user as any);
+        window.dispatchEvent(new Event("thaksha:auth"));
+        const freshMetrics = await getAdminMetricsFn().catch(() => null);
+        setMetrics(freshMetrics);
+      }
+    } catch (err: any) {
+      setSetupError(err?.message || "Setup failed.");
+      toast.error(err?.message || "Setup failed");
+    } finally {
+      setSetupLoading(false);
+    }
+  };
+
+  const handleForgotRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotError(null);
+    setForgotSuccess(null);
+    setForgotLoading(true);
+    try {
+      const res = await adminRequestPasswordResetFn({ data: { email: forgotEmail } });
+      setForgotSuccess(res.message);
+      toast.success("Recovery token request processed.");
+    } catch (err: any) {
+      setForgotError(err?.message || "Password reset request failed.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleResetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError(null);
+    const str = evalStrength(resetPassword);
+    if (!str.minLength || !str.hasUpper || !str.hasLower || !str.hasNumber || !str.hasSpecial) {
+      setResetError("Password does not satisfy complexity requirements.");
+      return;
+    }
+    if (resetPassword !== resetConfirm) {
+      setResetError("Passwords do not match.");
+      return;
+    }
+    setResetLoading(true);
+    try {
+      const res = await adminResetPasswordWithTokenFn({
+        data: {
+          token: resetToken,
+          newPassword: resetPassword,
+          confirmPassword: resetConfirm,
+        },
+      });
+      toast.success(res.message);
+      setAuthGateMode("login");
+      setResetToken("");
+      setResetPassword("");
+      setResetConfirm("");
+    } catch (err: any) {
+      setResetError(err?.message || "Password reset failed.");
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwdError(null);
+    setPwdSuccess(null);
+    const str = evalStrength(newPassword);
+    if (!str.minLength || !str.hasUpper || !str.hasLower || !str.hasNumber || !str.hasSpecial) {
+      setPwdError("New password must be at least 12 characters and include uppercase, lowercase, numbers, and symbols.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPwdError("New password and confirmation do not match.");
+      return;
+    }
+    setPwdLoading(true);
+    try {
+      const res = await adminChangePasswordFn({
+        data: {
+          currentPassword: currPassword,
+          newPassword,
+          confirmPassword,
+        },
+      });
+      setPwdSuccess(res.message);
+      toast.success("Administrator password updated successfully.");
+      setCurrPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: any) {
+      setPwdError(err?.message || "Failed to update password.");
+      toast.error(err?.message || "Update failed");
+    } finally {
+      setPwdLoading(false);
+    }
+  };
+
+  const handleChangeEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEmailError(null);
+    setEmailSuccess(null);
+    setEmailLoading(true);
+    try {
+      const res = await adminChangeEmailFn({
+        data: {
+          newEmail: newAdminEmail,
+          passwordConfirm: emailConfirmPassword,
+        },
+      });
+      setEmailSuccess(`Administrator email successfully updated to ${res.newEmail}.`);
+      toast.success("Admin email updated.");
+      if (currentUser) {
+        setCurrentUser({ ...currentUser, email: res.newEmail });
+      }
+      setNewAdminEmail("");
+      setEmailConfirmPassword("");
+    } catch (err: any) {
+      setEmailError(err?.message || "Failed to update admin email.");
+      toast.error(err?.message || "Email update failed");
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  const handleTerminateOtherSessions = async () => {
+    setTerminatingSessions(true);
+    try {
+      const res = await adminTerminateOtherSessionsFn();
+      toast.success(`Successfully terminated ${res.count} other active session(s).`);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to terminate sessions.");
+    } finally {
+      setTerminatingSessions(false);
     }
   };
 
@@ -389,7 +627,7 @@ function AdminDashboardPage() {
     return (
       <div className="min-h-screen bg-[#141210] text-[#EFECE6] font-sans flex items-center justify-center p-4">
         <Toaster richColors position="top-right" />
-        <div className="w-full max-w-md border border-[#2C2825] bg-[#1B1816] p-8 rounded shadow-2xl">
+        <div className="w-full max-w-lg border border-[#2C2825] bg-[#1B1816] p-8 rounded shadow-2xl">
           <div className="flex items-center gap-2 mb-6">
             <img src="/thaksha-logo.png" alt="Thaksha" className="h-8 w-8 object-contain" />
             <span className="font-serif text-2xl font-bold tracking-wider text-[#C59B63] uppercase">Thaksha</span>
@@ -397,45 +635,355 @@ function AdminDashboardPage() {
               Security Gate
             </span>
           </div>
-          <h2 className="font-serif text-3xl text-[#EFECE6] mb-1">Operations Console</h2>
-          <p className="text-xs text-[#9D968D] mb-6">Sign in with administrator credentials to manage your store.</p>
 
-          {loginError && (
-            <div className="mb-4 border border-red-500/30 bg-red-950/20 p-3 text-xs text-red-300 rounded">
-              {loginError}
+          {/* MODE: INITIAL SETUP */}
+          {authGateMode === "setup" && (
+            <div>
+              <div className="flex items-center gap-2 text-[#C59B63] mb-1">
+                <Sparkles size={16} />
+                <span className="text-[10px] uppercase tracking-widest font-semibold">Initial Store Setup</span>
+              </div>
+              <h2 className="font-serif text-3xl text-[#EFECE6] mb-1">Initialize Administrator</h2>
+              <p className="text-xs text-[#9D968D] mb-6">
+                No active administrator account was found. Establish the primary business owner administrator credentials.
+                This setup gate will be permanently locked immediately after completion.
+              </p>
+
+              {setupError && (
+                <div className="mb-4 border border-red-500/30 bg-red-950/20 p-3 text-xs text-red-300 rounded">
+                  {setupError}
+                </div>
+              )}
+
+              <form onSubmit={handleInitialSetup} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-[#9D968D] mb-1">
+                    Administrator Full Name
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    value={setupName}
+                    onChange={(e) => setSetupName(e.target.value)}
+                    placeholder="Business Owner Name"
+                    className="w-full border border-[#2C2825] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-[#9D968D] mb-1">
+                    Administrator Email Address
+                  </label>
+                  <input
+                    required
+                    type="email"
+                    value={setupEmail}
+                    onChange={(e) => setSetupEmail(e.target.value)}
+                    placeholder="owner@yourdomain.com"
+                    className="w-full border border-[#2C2825] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-[#9D968D] mb-1">
+                    Master Password
+                  </label>
+                  <input
+                    required
+                    type="password"
+                    placeholder="••••••••••••"
+                    value={setupPassword}
+                    onChange={(e) => setSetupPassword(e.target.value)}
+                    className="w-full border border-[#2C2825] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-[#9D968D] mb-1">
+                    Confirm Master Password
+                  </label>
+                  <input
+                    required
+                    type="password"
+                    placeholder="••••••••••••"
+                    value={setupConfirm}
+                    onChange={(e) => setSetupConfirm(e.target.value)}
+                    className="w-full border border-[#2C2825] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
+                  />
+                </div>
+
+                {/* Password Strength Checklist */}
+                {(() => {
+                  const str = evalStrength(setupPassword);
+                  return (
+                    <div className="rounded border border-[#2C2825] bg-[#151311] p-3 text-[11px] space-y-1">
+                      <p className="font-semibold text-[#C59B63] uppercase tracking-wider text-[9px]">
+                        Security Complexity:
+                      </p>
+                      <div className="grid grid-cols-2 gap-1 pt-1 text-[10px]">
+                        <span className={`flex items-center gap-1 ${str.minLength ? "text-emerald-400" : "text-[#716A62]"}`}>
+                          {str.minLength ? <CheckCircle2 size={11} /> : <XCircle size={11} />} 12+ Chars
+                        </span>
+                        <span className={`flex items-center gap-1 ${str.hasUpper ? "text-emerald-400" : "text-[#716A62]"}`}>
+                          {str.hasUpper ? <CheckCircle2 size={11} /> : <XCircle size={11} />} Uppercase (A-Z)
+                        </span>
+                        <span className={`flex items-center gap-1 ${str.hasLower ? "text-emerald-400" : "text-[#716A62]"}`}>
+                          {str.hasLower ? <CheckCircle2 size={11} /> : <XCircle size={11} />} Lowercase (a-z)
+                        </span>
+                        <span className={`flex items-center gap-1 ${str.hasNumber ? "text-emerald-400" : "text-[#716A62]"}`}>
+                          {str.hasNumber ? <CheckCircle2 size={11} /> : <XCircle size={11} />} Number (0-9)
+                        </span>
+                        <span className={`flex items-center gap-1 col-span-2 ${str.hasSpecial ? "text-emerald-400" : "text-[#716A62]"}`}>
+                          {str.hasSpecial ? <CheckCircle2 size={11} /> : <XCircle size={11} />} Special Symbol (!@#$%...)
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <button
+                  type="submit"
+                  disabled={setupLoading}
+                  className="w-full bg-[#C59B63] hover:bg-[#b0874e] text-[#1B1816] py-3 rounded font-semibold uppercase tracking-wider transition-colors disabled:opacity-50 text-xs mt-2"
+                >
+                  {setupLoading ? "Initializing Administrator..." : "Establish Master Account"}
+                </button>
+
+                {!setupNeeded && (
+                  <div className="text-center pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setAuthGateMode("login")}
+                      className="text-[#9D968D] hover:text-[#C59B63] text-xs underline"
+                    >
+                      Return to Sign In
+                    </button>
+                  </div>
+                )}
+              </form>
             </div>
           )}
 
-          <form onSubmit={handleInlineLogin} className="space-y-4 text-xs">
+          {/* MODE: STANDARD LOGIN */}
+          {authGateMode === "login" && (
             <div>
-              <label className="block text-[10px] uppercase tracking-wider text-[#9D968D] mb-1">Admin Email</label>
-              <input
-                required
-                type="email"
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
-                className="w-full border border-[#2C2825] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
-              />
+              <h2 className="font-serif text-3xl text-[#EFECE6] mb-1">Operations Console</h2>
+              <p className="text-xs text-[#9D968D] mb-6">
+                Sign in with administrator credentials to manage your store.
+              </p>
+
+              {loginError && (
+                <div className="mb-4 border border-red-500/30 bg-red-950/20 p-3 text-xs text-red-300 rounded">
+                  {loginError}
+                </div>
+              )}
+
+              <form onSubmit={handleInlineLogin} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-[#9D968D] mb-1">Admin Email</label>
+                  <input
+                    required
+                    type="email"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    placeholder="owner@yourdomain.com"
+                    className="w-full border border-[#2C2825] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-[10px] uppercase tracking-wider text-[#9D968D]">Password</label>
+                    <button
+                      type="button"
+                      onClick={() => setAuthGateMode("forgot")}
+                      className="text-[#C59B63] hover:underline text-[10px]"
+                    >
+                      Forgot Password?
+                    </button>
+                  </div>
+                  <input
+                    required
+                    type="password"
+                    placeholder="••••••••••••"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    className="w-full border border-[#2C2825] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={loginLoading}
+                  className="w-full bg-[#C59B63] hover:bg-[#b0874e] text-[#1B1816] py-3 rounded font-semibold uppercase tracking-wider transition-colors disabled:opacity-50 text-xs"
+                >
+                  {loginLoading ? "Verifying Session..." : "Enter Operations Console"}
+                </button>
+
+                <div className="text-center pt-2">
+                  <Link to="/" className="text-xs text-[#9D968D] hover:text-[#C59B63] underline">
+                    Return to customer storefront
+                  </Link>
+                </div>
+              </form>
             </div>
+          )}
+
+          {/* MODE: FORGOT PASSWORD */}
+          {authGateMode === "forgot" && (
             <div>
-              <label className="block text-[10px] uppercase tracking-wider text-[#9D968D] mb-1">Password</label>
-              <input
-                required
-                type="password"
-                placeholder="••••••••••••"
-                value={loginPassword}
-                onChange={(e) => setLoginPassword(e.target.value)}
-                className="w-full border border-[#2C2825] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
-              />
+              <h2 className="font-serif text-3xl text-[#EFECE6] mb-1">Recover Access</h2>
+              <p className="text-xs text-[#9D968D] mb-6">
+                Enter your administrator email to receive a single-use password recovery token.
+              </p>
+
+              {forgotError && (
+                <div className="mb-4 border border-red-500/30 bg-red-950/20 p-3 text-xs text-red-300 rounded">
+                  {forgotError}
+                </div>
+              )}
+
+              {forgotSuccess ? (
+                <div className="space-y-4">
+                  <div className="border border-emerald-500/30 bg-emerald-950/20 p-4 text-xs text-emerald-300 rounded space-y-1">
+                    <p className="font-semibold flex items-center gap-1.5 text-emerald-400">
+                      <CheckCircle2 size={14} /> Token Dispatched
+                    </p>
+                    <p>{forgotSuccess}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAuthGateMode("reset")}
+                    className="w-full bg-[#C59B63] hover:bg-[#b0874e] text-[#1B1816] py-3 rounded font-semibold uppercase tracking-wider text-xs"
+                  >
+                    Enter Recovery Token
+                  </button>
+                  <div className="text-center pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthGateMode("login");
+                        setForgotSuccess(null);
+                      }}
+                      className="text-xs text-[#9D968D] hover:text-[#C59B63] underline"
+                    >
+                      Back to Administrator Sign In
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleForgotRequest} className="space-y-4 text-xs">
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wider text-[#9D968D] mb-1">
+                      Admin Email
+                    </label>
+                    <input
+                      required
+                      type="email"
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      placeholder="owner@yourdomain.com"
+                      className="w-full border border-[#2C2825] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={forgotLoading}
+                    className="w-full bg-[#C59B63] hover:bg-[#b0874e] text-[#1B1816] py-3 rounded font-semibold uppercase tracking-wider transition-colors disabled:opacity-50 text-xs"
+                  >
+                    {forgotLoading ? "Dispatching..." : "Issue Recovery Token"}
+                  </button>
+                  <div className="flex justify-between items-center pt-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setAuthGateMode("reset")}
+                      className="text-[#C59B63] hover:underline"
+                    >
+                      Have a token?
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAuthGateMode("login")}
+                      className="text-[#9D968D] hover:text-[#C59B63] underline"
+                    >
+                      Cancel & Sign In
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
-            <button
-              type="submit"
-              disabled={loginLoading}
-              className="w-full bg-[#C59B63] hover:bg-[#b0874e] text-[#1B1816] py-3 rounded font-semibold uppercase tracking-wider transition-colors disabled:opacity-50 text-xs"
-            >
-              {loginLoading ? "Verifying Session..." : "Enter Operations Console"}
-            </button>
-          </form>
+          )}
+
+          {/* MODE: RESET WITH TOKEN */}
+          {authGateMode === "reset" && (
+            <div>
+              <h2 className="font-serif text-3xl text-[#EFECE6] mb-1">Reset Password</h2>
+              <p className="text-xs text-[#9D968D] mb-6">
+                Enter your single-use recovery token and set your new administrator password.
+              </p>
+
+              {resetError && (
+                <div className="mb-4 border border-red-500/30 bg-red-950/20 p-3 text-xs text-red-300 rounded">
+                  {resetError}
+                </div>
+              )}
+
+              <form onSubmit={handleResetSubmit} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-[#9D968D] mb-1">
+                    Recovery Token
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    value={resetToken}
+                    onChange={(e) => setResetToken(e.target.value)}
+                    placeholder="Paste 64-character token"
+                    className="w-full border border-[#2C2825] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none focus:border-[#C59B63] font-mono text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-[#9D968D] mb-1">
+                    New Master Password
+                  </label>
+                  <input
+                    required
+                    type="password"
+                    placeholder="••••••••••••"
+                    value={resetPassword}
+                    onChange={(e) => setResetPassword(e.target.value)}
+                    className="w-full border border-[#2C2825] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-[#9D968D] mb-1">
+                    Confirm New Master Password
+                  </label>
+                  <input
+                    required
+                    type="password"
+                    placeholder="••••••••••••"
+                    value={resetConfirm}
+                    onChange={(e) => setResetConfirm(e.target.value)}
+                    className="w-full border border-[#2C2825] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={resetLoading}
+                  className="w-full bg-[#C59B63] hover:bg-[#b0874e] text-[#1B1816] py-3 rounded font-semibold uppercase tracking-wider transition-colors disabled:opacity-50 text-xs"
+                >
+                  {resetLoading ? "Updating..." : "Update Password & Invalidate Sessions"}
+                </button>
+
+                <div className="text-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setAuthGateMode("login")}
+                    className="text-xs text-[#9D968D] hover:text-[#C59B63] underline"
+                  >
+                    Back to Administrator Sign In
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -495,6 +1043,7 @@ function AdminDashboardPage() {
             { id: "coupons", label: "Promotions & Codes", icon: Tag },
             { id: "reviews", label: "Patron Reviews", icon: Star },
             { id: "settings", label: "Store Settings", icon: Sliders },
+            { id: "security", label: "Account & Credentials", icon: ShieldCheck },
             { id: "audit", label: "Security & Audit", icon: ShieldAlert },
           ].map(({ id, label, icon: Icon }) => (
             <button
@@ -1309,6 +1858,241 @@ function AdminDashboardPage() {
                   ))}
                 </div>
               )}
+              {/* Quick Jump to Account & Security */}
+              <div className="flex items-center justify-between border border-[#3E3832] bg-[#1E1B18] p-4 rounded">
+                <div>
+                  <h4 className="text-xs font-semibold text-[#EFECE6] uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck size={14} className="text-[#C59B63]" />
+                    Administrator Account & Security
+                  </h4>
+                  <p className="text-[11px] text-[#9D968D] mt-0.5">
+                    Update master administrator email, modify secure passwords, or invalidate sessions.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("security")}
+                  className="bg-[#C59B63] hover:bg-[#b0874e] text-[#1B1816] px-4 py-2 rounded text-xs font-semibold uppercase tracking-wider transition-colors shrink-0"
+                >
+                  Manage Credentials →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 10: ACCOUNT & CREDENTIALS SETTINGS */}
+          {activeTab === "security" && (
+            <div className="space-y-8">
+              <div>
+                <h1 className="font-serif text-3xl md:text-4xl text-[#EFECE6]">Administrator Account & Security</h1>
+                <p className="text-xs text-[#9D968D] mt-1">
+                  Manage master administrator credentials, cryptographic password hashes, and session enforcement rules.
+                </p>
+              </div>
+
+              {/* Grid with 2 Columns */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* CARD 1: CHANGE MASTER PASSWORD */}
+                <div className="border border-[#2C2825] bg-[#1E1B18] p-6 rounded space-y-4">
+                  <div className="flex items-center gap-2 text-[#C59B63]">
+                    <KeyRound size={18} />
+                    <h3 className="font-serif text-xl text-[#EFECE6]">Change Master Password</h3>
+                  </div>
+                  <p className="text-xs text-[#9D968D]">
+                    Updating your password will calculate a new salted cryptographic hash and terminate all other active administrator sessions across devices.
+                  </p>
+
+                  {pwdError && (
+                    <div className="border border-red-500/30 bg-red-950/20 p-3 text-xs text-red-300 rounded">
+                      {pwdError}
+                    </div>
+                  )}
+
+                  {pwdSuccess && (
+                    <div className="border border-emerald-500/30 bg-emerald-950/20 p-3 text-xs text-emerald-300 rounded">
+                      {pwdSuccess}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleChangePassword} className="space-y-4 text-xs">
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-wider text-[#9D968D] mb-1">
+                        Current Password
+                      </label>
+                      <input
+                        required
+                        type="password"
+                        placeholder="••••••••••••"
+                        value={currPassword}
+                        onChange={(e) => setCurrPassword(e.target.value)}
+                        className="w-full border border-[#3E3832] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-wider text-[#9D968D] mb-1">
+                        New Master Password
+                      </label>
+                      <input
+                        required
+                        type="password"
+                        placeholder="••••••••••••"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="w-full border border-[#3E3832] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-wider text-[#9D968D] mb-1">
+                        Confirm New Master Password
+                      </label>
+                      <input
+                        required
+                        type="password"
+                        placeholder="••••••••••••"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="w-full border border-[#3E3832] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
+                      />
+                    </div>
+
+                    {/* Complexity checklist */}
+                    {(() => {
+                      const str = evalStrength(newPassword);
+                      return (
+                        <div className="rounded border border-[#2C2825] bg-[#151311] p-3 text-[11px] space-y-1">
+                          <p className="font-semibold text-[#C59B63] uppercase tracking-wider text-[9px]">
+                            Password Policy:
+                          </p>
+                          <div className="grid grid-cols-2 gap-1 pt-1 text-[10px]">
+                            <span className={`flex items-center gap-1 ${str.minLength ? "text-emerald-400" : "text-[#716A62]"}`}>
+                              {str.minLength ? <CheckCircle2 size={11} /> : <XCircle size={11} />} 12+ Chars
+                            </span>
+                            <span className={`flex items-center gap-1 ${str.hasUpper ? "text-emerald-400" : "text-[#716A62]"}`}>
+                              {str.hasUpper ? <CheckCircle2 size={11} /> : <XCircle size={11} />} Uppercase (A-Z)
+                            </span>
+                            <span className={`flex items-center gap-1 ${str.hasLower ? "text-emerald-400" : "text-[#716A62]"}`}>
+                              {str.hasLower ? <CheckCircle2 size={11} /> : <XCircle size={11} />} Lowercase (a-z)
+                            </span>
+                            <span className={`flex items-center gap-1 ${str.hasNumber ? "text-emerald-400" : "text-[#716A62]"}`}>
+                              {str.hasNumber ? <CheckCircle2 size={11} /> : <XCircle size={11} />} Number (0-9)
+                            </span>
+                            <span className={`flex items-center gap-1 col-span-2 ${str.hasSpecial ? "text-emerald-400" : "text-[#716A62]"}`}>
+                              {str.hasSpecial ? <CheckCircle2 size={11} /> : <XCircle size={11} />} Special Symbol
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    <button
+                      type="submit"
+                      disabled={pwdLoading}
+                      className="w-full bg-[#C59B63] hover:bg-[#b0874e] text-[#1B1816] py-3 rounded font-semibold uppercase tracking-wider transition-colors disabled:opacity-50 text-xs"
+                    >
+                      {pwdLoading ? "Securing Password..." : "Update Master Password"}
+                    </button>
+                  </form>
+                </div>
+
+                {/* CARD 2: CHANGE OFFICIAL EMAIL */}
+                <div className="space-y-6">
+                  <div className="border border-[#2C2825] bg-[#1E1B18] p-6 rounded space-y-4">
+                    <div className="flex items-center gap-2 text-[#C59B63]">
+                      <Mail size={18} />
+                      <h3 className="font-serif text-xl text-[#EFECE6]">Change Administrator Email</h3>
+                    </div>
+                    <p className="text-xs text-[#9D968D]">
+                      Update your primary administrative login address. Requires entering your current password to authorize.
+                    </p>
+
+                    {emailError && (
+                      <div className="border border-red-500/30 bg-red-950/20 p-3 text-xs text-red-300 rounded">
+                        {emailError}
+                      </div>
+                    )}
+
+                    {emailSuccess && (
+                      <div className="border border-emerald-500/30 bg-emerald-950/20 p-3 text-xs text-emerald-300 rounded">
+                        {emailSuccess}
+                      </div>
+                    )}
+
+                    <form onSubmit={handleChangeEmail} className="space-y-4 text-xs">
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-wider text-[#9D968D] mb-1">
+                          Current Registered Email
+                        </label>
+                        <input
+                          disabled
+                          type="text"
+                          value={currentUser?.email || ""}
+                          className="w-full border border-[#2C2825] bg-[#151311] p-3 text-[#716A62] rounded font-mono text-xs cursor-not-allowed"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-wider text-[#9D968D] mb-1">
+                          New Administrator Email
+                        </label>
+                        <input
+                          required
+                          type="email"
+                          value={newAdminEmail}
+                          onChange={(e) => setNewAdminEmail(e.target.value)}
+                          placeholder="newowner@yourdomain.com"
+                          className="w-full border border-[#3E3832] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-wider text-[#9D968D] mb-1">
+                          Current Password (Authorization)
+                        </label>
+                        <input
+                          required
+                          type="password"
+                          placeholder="••••••••••••"
+                          value={emailConfirmPassword}
+                          onChange={(e) => setEmailConfirmPassword(e.target.value)}
+                          className="w-full border border-[#3E3832] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={emailLoading}
+                        className="w-full bg-[#C59B63] hover:bg-[#b0874e] text-[#1B1816] py-3 rounded font-semibold uppercase tracking-wider transition-colors disabled:opacity-50 text-xs"
+                      >
+                        {emailLoading ? "Updating Email..." : "Authorize & Update Email"}
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* CARD 3: SESSIONS & HARDENED CONTROLS */}
+                  <div className="border border-[#2C2825] bg-[#1E1B18] p-6 rounded space-y-4">
+                    <div className="flex items-center gap-2 text-[#C59B63]">
+                      <ShieldCheck size={18} />
+                      <h3 className="font-serif text-xl text-[#EFECE6]">Active Session Management</h3>
+                    </div>
+                    <div className="text-xs text-[#9D968D] space-y-2">
+                      <p>
+                        Current Session: <span className="font-mono text-emerald-400">Active</span> (Protected by HttpOnly, SameSite=Lax, and Secure SSL Cookie)
+                      </p>
+                      <p>
+                        Role Enforcement: <span className="font-mono text-[#C59B63]">ADMIN (Authoritative PostgreSQL Guard)</span>
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleTerminateOtherSessions}
+                      disabled={terminatingSessions}
+                      className="w-full border border-red-500/30 bg-red-950/20 hover:bg-red-950/40 text-red-300 py-3 rounded font-semibold uppercase tracking-wider transition-colors text-xs flex items-center justify-center gap-2"
+                    >
+                      <LogOut size={14} />
+                      {terminatingSessions ? "Terminating..." : "Terminate All Other Active Sessions"}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </main>
