@@ -6,7 +6,7 @@ import {
   createRazorpayOrder,
   verifyRazorpayPaymentSignature,
 } from "./payment-gateways";
-import { sendAdminOrderAlert } from "./notifications";
+import { sendAdminOrderAlert } from "./server-admin-notifications";
 
 const SESSION_COOKIE_NAME = "thaksha_session";
 
