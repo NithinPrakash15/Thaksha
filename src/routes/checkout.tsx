@@ -847,7 +847,7 @@ function CheckoutPage() {
                   </div>
 
                   <div className="flex justify-between">
-                    <dt>GST (18%)</dt>
+                    <dt>GST ({pricing.taxRate ?? 18}%)</dt>
                     <dd className="font-medium text-brand-primary">{formatRupees(pricing.tax)}</dd>
                   </div>
 

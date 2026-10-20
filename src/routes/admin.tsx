@@ -469,6 +469,22 @@ function AdminDashboardPage() {
     }
   }, [activeTab]);
 
+  // Pre-load store settings on mount for live rate visibility
+  useEffect(() => {
+    if (currentUser && currentUser.role === "ADMIN") {
+      getAdminStoreSettingsFn()
+        .then((res) => {
+          setStoreSettings(res);
+          const initialVals: Record<string, string> = {};
+          res.forEach((s) => {
+            initialVals[s.key] = s.value;
+          });
+          setEditingSettings((prev) => ({ ...initialVals, ...prev }));
+        })
+        .catch(() => {});
+    }
+  }, [currentUser]);
+
   const handleModerateReview = async (reviewId: string, action: "APPROVE" | "UNAPPROVE" | "DELETE") => {
     try {
       await moderateAdminReviewFn({ data: { reviewId, action } });
@@ -492,6 +508,51 @@ function AdminDashboardPage() {
       toast.error(err?.message || "Failed to update setting.");
     } finally {
       setSavingSettingKey(null);
+    }
+  };
+
+  const [savingShippingTax, setSavingShippingTax] = useState(false);
+
+  // Dedicated atomic updater for Shipping charges and Estimated GST
+  const handleSaveShippingAndTax = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setSavingShippingTax(true);
+    try {
+      const flatRate = editingSettings["flat_shipping_rate"] ?? "99";
+      const freeThreshold = editingSettings["free_shipping_threshold"] ?? "4999";
+      const taxRate = editingSettings["tax_rate_percent"] ?? "18";
+
+      await Promise.all([
+        updateAdminStoreSettingFn({
+          data: {
+            key: "flat_shipping_rate",
+            value: flatRate,
+            description: "Standard delivery fee in Rupees when below threshold.",
+          },
+        }),
+        updateAdminStoreSettingFn({
+          data: {
+            key: "free_shipping_threshold",
+            value: freeThreshold,
+            description: "Cart subtotal threshold in Rupees for complimentary shipping.",
+          },
+        }),
+        updateAdminStoreSettingFn({
+          data: {
+            key: "tax_rate_percent",
+            value: taxRate,
+            description: "Applicable GST tax percentage for handcrafted grooming tools.",
+          },
+        }),
+      ]);
+
+      toast.success("Shipping charges and Estimated GST rates updated successfully! Changes are live across storefront checkout.");
+      const res = await getAdminStoreSettingsFn();
+      setStoreSettings(res);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update shipping & tax settings.");
+    } finally {
+      setSavingShippingTax(false);
     }
   };
 
@@ -1475,23 +1536,44 @@ function AdminDashboardPage() {
                   <p className="text-xs text-[#9D968D] mt-1">Review orders, update dispatch states, add BlueDart tracking numbers, and fulfill orders.</p>
                 </div>
 
-                {/* Filter */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-[#9D968D]">Status:</span>
-                  <select
-                    value={orderStatusFilter}
-                    onChange={(e) => setOrderStatusFilter(e.target.value)}
-                    className="border border-[#2C2825] bg-[#1E1B18] p-2 text-xs text-[#EFECE6] rounded outline-none"
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Dynamic Rate Info Bar */}
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("settings")}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded bg-[#1E1B18] hover:bg-[#25211E] border border-[#3E3832] text-xs text-[#EFECE6] transition-colors"
+                    title="Click to modify Live Shipping Charge and Estimated GST"
                   >
-                    <option value="ALL">All States</option>
-                    <option value="PENDING">Pending</option>
-                    <option value="PAID">Paid</option>
-                    <option value="PROCESSING">Processing</option>
-                    <option value="SHIPPED">Shipped</option>
-                    <option value="DELIVERED">Delivered</option>
-                    <option value="CANCELLED">Cancelled / Refund Due</option>
-                    <option value="REFUNDED">Refunded</option>
-                  </select>
+                    <Truck size={13} className="text-[#C59B63]" />
+                    <span className="text-[11px]">
+                      Shipping: <strong className="text-[#C59B63]">₹{editingSettings["flat_shipping_rate"] ?? "99"}</strong>{" "}
+                      (Free &gt; ₹{editingSettings["free_shipping_threshold"] ?? "4999"})
+                    </span>
+                    <span className="text-[#3E3832]">|</span>
+                    <span className="text-[11px]">
+                      GST: <strong className="text-[#C59B63]">{editingSettings["tax_rate_percent"] ?? "18"}%</strong>
+                    </span>
+                    <Edit size={11} className="text-[#9D968D] ml-1" />
+                  </button>
+
+                  {/* Filter */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-[#9D968D]">Status:</span>
+                    <select
+                      value={orderStatusFilter}
+                      onChange={(e) => setOrderStatusFilter(e.target.value)}
+                      className="border border-[#2C2825] bg-[#1E1B18] p-2 text-xs text-[#EFECE6] rounded outline-none"
+                    >
+                      <option value="ALL">All States</option>
+                      <option value="PENDING">Pending</option>
+                      <option value="PAID">Paid</option>
+                      <option value="PROCESSING">Processing</option>
+                      <option value="SHIPPED">Shipped</option>
+                      <option value="DELIVERED">Delivered</option>
+                      <option value="CANCELLED">Cancelled / Refund Due</option>
+                      <option value="REFUNDED">Refunded</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -1969,68 +2051,267 @@ function AdminDashboardPage() {
             </div>
           )}
 
-          {/* TAB 9: STORE SETTINGS */}
+          {/* TAB 8: STORE SETTINGS */}
           {activeTab === "settings" && (
-            <div className="space-y-6">
+            <div className="space-y-8">
               <div>
-                <h1 className="font-serif text-3xl text-[#EFECE6]">Store Configuration & Operational Policies</h1>
+                <h1 className="font-serif text-3xl md:text-4xl text-[#EFECE6]">Store Configuration & Operational Policies</h1>
                 <p className="text-xs text-[#9D968D] mt-1">
-                  Manage shipping rules, concierge contact channels, and dynamic storefront notices stored in PostgreSQL.
+                  Manage live shipping charges, complimentary shipping thresholds, Estimated GST tax rates, concierge contacts, and dynamic storefront notices.
                 </p>
               </div>
 
-              {loadingSettings ? (
-                <div className="text-center py-12 text-[#9D968D] text-xs">Loading operational parameters...</div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {storeSettings.map((s) => (
-                    <div key={s.key} className="border border-[#2C2825] bg-[#1E1B18] p-5 rounded space-y-3">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <label className="font-mono text-xs uppercase tracking-wider text-[#C59B63] font-bold block">
-                            {s.key.replace(/_/g, " ")}
-                          </label>
-                          <p className="text-[11px] text-[#9D968D] mt-0.5">{s.description}</p>
-                        </div>
-                        {s.updatedAt && (
-                          <span className="text-[9px] text-[#716A62] font-mono">Updated: {s.updatedAt}</span>
-                        )}
-                      </div>
+              {/* DEDICATED PRIORITY MODULE: SHIPPING & ESTIMATED GST RATES */}
+              <div className="border border-[#C59B63]/40 bg-[#1E1B18] rounded-lg p-6 shadow-xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-[#C59B63]/5 rounded-full blur-3xl pointer-events-none" />
 
-                      <div className="flex items-center gap-2 pt-1">
-                        {s.key.includes("banner") || s.key.includes("tagline") ? (
-                          <textarea
-                            rows={2}
-                            value={editingSettings[s.key] ?? s.value}
-                            onChange={(e) =>
-                              setEditingSettings({ ...editingSettings, [s.key]: e.target.value })
-                            }
-                            className="flex-1 border border-[#3E3832] bg-[#151311] p-2.5 text-xs text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
-                          />
-                        ) : (
-                          <input
-                            type="text"
-                            value={editingSettings[s.key] ?? s.value}
-                            onChange={(e) =>
-                              setEditingSettings({ ...editingSettings, [s.key]: e.target.value })
-                            }
-                            className="flex-1 border border-[#3E3832] bg-[#151311] p-2.5 text-xs text-[#EFECE6] rounded outline-none focus:border-[#C59B63] font-mono"
-                          />
-                        )}
-
-                        <button
-                          onClick={() => handleSaveSetting(s.key, s.description)}
-                          disabled={savingSettingKey === s.key}
-                          className="bg-[#C59B63] hover:bg-[#b0874e] text-[#1B1816] px-4 py-2.5 rounded text-xs font-semibold uppercase tracking-wider transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1.5"
-                        >
-                          <Save size={13} />
-                          <span>{savingSettingKey === s.key ? "Saving..." : "Save"}</span>
-                        </button>
-                      </div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#2C2825] pb-4 mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-[#C59B63]/10 border border-[#C59B63]/30 flex items-center justify-center text-[#C59B63]">
+                      <Truck size={20} />
                     </div>
-                  ))}
+                    <div>
+                      <h2 className="font-serif text-xl text-[#EFECE6] flex items-center gap-2">
+                        <span>Shipping Charges & Estimated GST</span>
+                        <span className="text-[9px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded bg-[#C59B63]/20 text-[#C59B63] border border-[#C59B63]/30">
+                          Live Checkout Rates
+                        </span>
+                      </h2>
+                      <p className="text-xs text-[#9D968D]">
+                        These values are calculated live on every customer bag, checkout step, and payment order.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveShippingAndTax}
+                    disabled={savingShippingTax}
+                    className="bg-[#C59B63] hover:bg-[#b0874e] text-[#1B1816] px-5 py-2.5 rounded text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shrink-0"
+                  >
+                    {savingShippingTax ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                    <span>{savingShippingTax ? "Updating Store..." : "Save Shipping & GST Rates"}</span>
+                  </button>
                 </div>
-              )}
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* FIELD 1: FLAT SHIPPING CHARGE */}
+                  <div className="space-y-2 bg-[#151311] p-4 rounded border border-[#2C2825]">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-[#C59B63] flex items-center gap-1.5">
+                        <Truck size={14} /> Standard Delivery Fee
+                      </label>
+                      <span className="text-[10px] text-[#9D968D]">Per Order</span>
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#9D968D] font-mono">₹</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={editingSettings["flat_shipping_rate"] ?? "99"}
+                        onChange={(e) =>
+                          setEditingSettings({ ...editingSettings, flat_shipping_rate: e.target.value })
+                        }
+                        className="w-full border border-[#3E3832] bg-[#1E1B18] pl-8 pr-3 py-2.5 text-sm text-[#EFECE6] rounded outline-none focus:border-[#C59B63] font-mono font-semibold"
+                        placeholder="99"
+                      />
+                    </div>
+                    <p className="text-[10px] text-[#9D968D] leading-tight">
+                      Standard delivery fee applied when order subtotal is below the free shipping threshold. Enter 0 for store-wide free shipping.
+                    </p>
+                  </div>
+
+                  {/* FIELD 2: FREE SHIPPING THRESHOLD */}
+                  <div className="space-y-2 bg-[#151311] p-4 rounded border border-[#2C2825]">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-[#C59B63] flex items-center gap-1.5">
+                        <CheckCircle2 size={14} /> Free Shipping Threshold
+                      </label>
+                      <span className="text-[10px] text-[#9D968D]">Cart Subtotal</span>
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#9D968D] font-mono">₹</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={editingSettings["free_shipping_threshold"] ?? "4999"}
+                        onChange={(e) =>
+                          setEditingSettings({ ...editingSettings, free_shipping_threshold: e.target.value })
+                        }
+                        className="w-full border border-[#3E3832] bg-[#1E1B18] pl-8 pr-3 py-2.5 text-sm text-[#EFECE6] rounded outline-none focus:border-[#C59B63] font-mono font-semibold"
+                        placeholder="4999"
+                      />
+                    </div>
+                    <p className="text-[10px] text-[#9D968D] leading-tight">
+                      Orders reaching or exceeding this amount receive complimentary shipping. Set 0 to disable free delivery.
+                    </p>
+                  </div>
+
+                  {/* FIELD 3: ESTIMATED GST PERCENTAGE */}
+                  <div className="space-y-2 bg-[#151311] p-4 rounded border border-[#2C2825]">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-[#C59B63] flex items-center gap-1.5">
+                        <Tag size={14} /> Estimated GST Percentage
+                      </label>
+                      <span className="text-[10px] text-[#9D968D]">Applicable Tax</span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        value={editingSettings["tax_rate_percent"] ?? "18"}
+                        onChange={(e) =>
+                          setEditingSettings({ ...editingSettings, tax_rate_percent: e.target.value })
+                        }
+                        className="w-full border border-[#3E3832] bg-[#1E1B18] pl-3 pr-8 py-2.5 text-sm text-[#EFECE6] rounded outline-none focus:border-[#C59B63] font-mono font-semibold"
+                        placeholder="18"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[#9D968D] font-mono font-bold">%</span>
+                    </div>
+
+                    {/* GST Quick Presets */}
+                    <div className="flex items-center gap-1.5 pt-1">
+                      <span className="text-[9px] uppercase tracking-wider text-[#716A62]">Presets:</span>
+                      {[0, 5, 12, 18, 28].map((pct) => (
+                        <button
+                          key={pct}
+                          type="button"
+                          onClick={() => setEditingSettings({ ...editingSettings, tax_rate_percent: pct.toString() })}
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                            (editingSettings["tax_rate_percent"] ?? "18") === pct.toString()
+                              ? "bg-[#C59B63] text-[#1B1816] font-bold"
+                              : "bg-[#25211E] text-[#9D968D] hover:text-[#EFECE6] border border-[#3E3832]"
+                          }`}
+                        >
+                          {pct}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* LIVE CHECKOUT IMPACT SIMULATOR */}
+                <div className="mt-6 pt-5 border-t border-[#2C2825]">
+                  <p className="text-[11px] font-semibold text-[#C59B63] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <TrendingUp size={13} /> Live Customer Checkout Preview:
+                  </p>
+                  {(() => {
+                    const flat = Math.max(0, Number(editingSettings["flat_shipping_rate"] ?? "99"));
+                    const thresh = Math.max(0, Number(editingSettings["free_shipping_threshold"] ?? "4999"));
+                    const gstRate = Math.max(0, Number(editingSettings["tax_rate_percent"] ?? "18"));
+
+                    // Example A: Subtotal 1499
+                    const subA = 1499;
+                    const shipA = thresh > 0 && subA >= thresh ? 0 : flat;
+                    const taxA = Math.round((subA * gstRate) / 100);
+                    const totalA = subA + shipA + taxA;
+
+                    // Example B: Subtotal 5499
+                    const subB = 5499;
+                    const shipB = thresh > 0 && subB >= thresh ? 0 : flat;
+                    const taxB = Math.round((subB * gstRate) / 100);
+                    const totalB = subB + shipB + taxB;
+
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                        <div className="bg-[#151311] p-3 rounded border border-[#2C2825] flex justify-between items-center">
+                          <div>
+                            <span className="text-[10px] text-[#9D968D] uppercase block">Cart Below Threshold (₹1,499):</span>
+                            <span className="text-[#EFECE6]">
+                              Subtotal: ₹1,499 + Shipping: <strong className="text-amber-400">₹{shipA}</strong> + GST ({gstRate}%): ₹{taxA}
+                            </span>
+                          </div>
+                          <div className="text-right pl-3 border-l border-[#2C2825]">
+                            <span className="text-[9px] uppercase text-[#9D968D] block">Customer Pays</span>
+                            <span className="font-mono text-sm font-bold text-[#C59B63]">₹{totalA.toLocaleString("en-IN")}</span>
+                          </div>
+                        </div>
+
+                        <div className="bg-[#151311] p-3 rounded border border-[#2C2825] flex justify-between items-center">
+                          <div>
+                            <span className="text-[10px] text-[#9D968D] uppercase block">Cart Above Threshold (₹5,499):</span>
+                            <span className="text-[#EFECE6]">
+                              Subtotal: ₹5,499 + Shipping: <strong className="text-emerald-400">{shipB === 0 ? "FREE (₹0)" : `₹${shipB}`}</strong> + GST ({gstRate}%): ₹{taxB}
+                            </span>
+                          </div>
+                          <div className="text-right pl-3 border-l border-[#2C2825]">
+                            <span className="text-[9px] uppercase text-[#9D968D] block">Customer Pays</span>
+                            <span className="font-mono text-sm font-bold text-[#C59B63]">₹{totalB.toLocaleString("en-IN")}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* OTHER STORE SETTINGS LIST */}
+              <div>
+                <h3 className="font-serif text-xl text-[#EFECE6] mb-1">General Storefront & Concierge Parameters</h3>
+                <p className="text-xs text-[#9D968D] mb-4">
+                  Top promotional announcement bar, concierge email, support phone, and branding tags.
+                </p>
+
+                {loadingSettings ? (
+                  <div className="text-center py-12 text-[#9D968D] text-xs">Loading operational parameters...</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {storeSettings
+                      .filter((s) => !["flat_shipping_rate", "free_shipping_threshold", "tax_rate_percent"].includes(s.key))
+                      .map((s) => (
+                        <div key={s.key} className="border border-[#2C2825] bg-[#1E1B18] p-5 rounded space-y-3">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <label className="font-mono text-xs uppercase tracking-wider text-[#C59B63] font-bold block">
+                                {s.key.replace(/_/g, " ")}
+                              </label>
+                              <p className="text-[11px] text-[#9D968D] mt-0.5">{s.description}</p>
+                            </div>
+                            {s.updatedAt && (
+                              <span className="text-[9px] text-[#716A62] font-mono">Updated: {s.updatedAt}</span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 pt-1">
+                            {s.key.includes("banner") || s.key.includes("tagline") ? (
+                              <textarea
+                                rows={2}
+                                value={editingSettings[s.key] ?? s.value}
+                                onChange={(e) =>
+                                  setEditingSettings({ ...editingSettings, [s.key]: e.target.value })
+                                }
+                                className="flex-1 border border-[#3E3832] bg-[#151311] p-2.5 text-xs text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
+                              />
+                            ) : (
+                              <input
+                                type="text"
+                                value={editingSettings[s.key] ?? s.value}
+                                onChange={(e) =>
+                                  setEditingSettings({ ...editingSettings, [s.key]: e.target.value })
+                                }
+                                className="flex-1 border border-[#3E3832] bg-[#151311] p-2.5 text-xs text-[#EFECE6] rounded outline-none focus:border-[#C59B63] font-mono"
+                              />
+                            )}
+
+                            <button
+                              onClick={() => handleSaveSetting(s.key, s.description)}
+                              disabled={savingSettingKey === s.key}
+                              className="bg-[#C59B63] hover:bg-[#b0874e] text-[#1B1816] px-4 py-2.5 rounded text-xs font-semibold uppercase tracking-wider transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1.5"
+                            >
+                              <Save size={13} />
+                              <span>{savingSettingKey === s.key ? "Saving..." : "Save"}</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+
               {/* Quick Jump to Account & Security */}
               <div className="flex items-center justify-between border border-[#3E3832] bg-[#1E1B18] p-4 rounded">
                 <div>

@@ -31,6 +31,8 @@ export type PricingCalculation = {
   discount: number;
   shipping: number;
   tax: number;
+  taxRate?: number;
+  freeShippingThreshold?: number;
   total: number;
   couponCode?: string;
   outOfStockItems: string[];
@@ -165,12 +167,41 @@ export const calculateOrderPricingFn = createServerFn({ method: "POST" })
     const subtotalRupees = Math.round(subtotalCents / 100);
     const discountRupees = Math.round(discountCents / 100);
 
-    // Shipping rules: Free over ₹4,999, else ₹99
-    const shippingRupees = subtotalRupees > 4999 || subtotalRupees === 0 ? 0 : 99;
+    // Live Shipping & GST settings from database (configurable by Admin)
+    let flatShippingRate = 99;
+    let freeShippingThreshold = 4999;
+    let taxRatePercent = 18;
+
+    try {
+      const dbSettings = await prisma.storeSetting.findMany({
+        where: {
+          key: { in: ["flat_shipping_rate", "free_shipping_threshold", "tax_rate_percent"] },
+        },
+      });
+
+      for (const s of dbSettings) {
+        if (s.key === "flat_shipping_rate" && !isNaN(Number(s.value))) {
+          flatShippingRate = Math.max(0, Number(s.value));
+        } else if (s.key === "free_shipping_threshold" && !isNaN(Number(s.value))) {
+          freeShippingThreshold = Math.max(0, Number(s.value));
+        } else if (s.key === "tax_rate_percent" && !isNaN(Number(s.value))) {
+          taxRatePercent = Math.max(0, Number(s.value));
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to retrieve dynamic store settings, using standard fallback rates", e);
+    }
+
+    // Dynamic Shipping rules: Free if subtotal reaches threshold (when threshold > 0) or cart is empty
+    const subtotalAfterDiscountRupees = Math.round(subtotalAfterDiscountCents / 100);
+    const qualifiesForFreeShipping =
+      subtotalRupees === 0 ||
+      (freeShippingThreshold > 0 && subtotalAfterDiscountRupees >= freeShippingThreshold);
+    const shippingRupees = qualifiesForFreeShipping ? 0 : flatShippingRate;
     const shippingCents = shippingRupees * 100;
 
-    // 18% GST (Standard luxury goods GST in India)
-    const taxCents = Math.round(subtotalAfterDiscountCents * 0.18);
+    // Dynamic GST (Goods & Services Tax) calculation based on admin configured percentage
+    const taxCents = Math.round(subtotalAfterDiscountCents * (taxRatePercent / 100));
     const taxRupees = Math.round(taxCents / 100);
 
     const totalCents = subtotalAfterDiscountCents + shippingCents + taxCents;
@@ -182,6 +213,8 @@ export const calculateOrderPricingFn = createServerFn({ method: "POST" })
       discount: discountRupees,
       shipping: shippingRupees,
       tax: taxRupees,
+      taxRate: taxRatePercent,
+      freeShippingThreshold,
       total: totalRupees,
       couponCode: discountCents > 0 ? couponCode : undefined,
       outOfStockItems,

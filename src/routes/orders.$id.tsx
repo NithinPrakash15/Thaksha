@@ -384,7 +384,16 @@ function OrderDetailPage() {
                 </div>
 
                 <div className="flex justify-between">
-                  <dt>GST (18%)</dt>
+                  <dt>
+                    GST{" "}
+                    {order.subtotalRupees > 0 && order.taxRupees > 0
+                      ? `(${Math.round(
+                          (order.taxRupees /
+                            Math.max(1, order.subtotalRupees - (order.discountRupees || 0))) *
+                            100,
+                        )}%)`
+                      : ""}
+                  </dt>
                   <dd className="font-medium text-brand-primary">{formatRupees(order.taxRupees)}</dd>
                 </div>
 
