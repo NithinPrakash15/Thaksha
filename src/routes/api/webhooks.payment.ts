@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { prisma } from "@/lib/prisma";
 import { verifyRazorpaySignature } from "@/lib/payment-gateways";
+import { sendAdminOrderAlert } from "@/lib/server-admin-notifications";
 
 export const Route = createFileRoute("/api/webhooks/payment")({
   server: {
@@ -125,6 +126,17 @@ export const Route = createFileRoute("/api/webhooks/payment")({
                 });
               }
             });
+
+            // Send instant SMS alert to admin phone (8891509026) via background webhook
+            sendAdminOrderAlert({
+              orderNumber: order.orderNumber,
+              customerName: order.email,
+              customerPhone: order.phone || "Not specified",
+              customerEmail: order.email,
+              totalRupees: Math.round(order.totalCents / 100),
+              items: order.items.map((i) => `${i.productName} (x${i.quantity})`),
+              status: "PAYMENT_CONFIRMED_WEBHOOK",
+            }).catch(() => {});
 
             return new Response(JSON.stringify({ status: "success", orderNumber: order.orderNumber }), {
               status: 200,
