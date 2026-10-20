@@ -6,6 +6,7 @@ import {
   getAdminProductsFn,
   createAdminProductFn,
   updateAdminProductFn,
+  deleteAdminProductFn,
   updateInventoryStockFn,
   getAdminOrdersFn,
   updateAdminOrderStatusFn,
@@ -53,6 +54,7 @@ import {
   Check,
   RotateCcw,
   Trash2,
+  Upload,
   Lock,
   ShieldCheck,
   KeyRound,
@@ -369,7 +371,13 @@ function AdminDashboardPage() {
   const [newProdStock, setNewProdStock] = useState(25);
   const [newProdCategory, setNewProdCategory] = useState("");
   const [newProdImageUrl, setNewProdImageUrl] = useState("/assets/hero-comb.jpg");
+  const [imageFileName, setImageFileName] = useState<string | null>(null);
+  const [imageFileUploading, setImageFileUploading] = useState(false);
   const [newProdBenefits, setNewProdBenefits] = useState("Handmade from seasoned neem wood\nScalp wellness stimulation");
+
+  // Product Deletion State
+  const [productToDelete, setProductToDelete] = useState<any | null>(null);
+  const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
 
   // Orders state
   const [orders, setOrders] = useState<any[]>([]);
@@ -526,6 +534,94 @@ function AdminDashboardPage() {
     }
   };
 
+  // Image file upload directly from computer with canvas-based optimization
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file (PNG, JPG, WebP, etc.).");
+      return;
+    }
+
+    if (file.size > 15 * 1024 * 1024) {
+      toast.error("Image file size is too large (maximum 15MB).");
+      return;
+    }
+
+    setImageFileUploading(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const rawDataUrl = event.target?.result as string;
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 1200;
+        let width = img.width;
+        let height = img.height;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL("image/jpeg", 0.88);
+          if (isEdit) {
+            setEditingProduct((prev: any) => ({ ...prev, image: compressed }));
+          } else {
+            setNewProdImageUrl(compressed);
+            setImageFileName(file.name);
+          }
+          toast.success("Product picture loaded from system.");
+        } else {
+          if (isEdit) {
+            setEditingProduct((prev: any) => ({ ...prev, image: rawDataUrl }));
+          } else {
+            setNewProdImageUrl(rawDataUrl);
+            setImageFileName(file.name);
+          }
+          toast.success("Product picture loaded from system.");
+        }
+        setImageFileUploading(false);
+      };
+      img.onerror = () => {
+        toast.error("Failed to decode image file.");
+        setImageFileUploading(false);
+      };
+      img.src = rawDataUrl;
+    };
+    reader.onerror = () => {
+      toast.error("Failed to read image from computer.");
+      setImageFileUploading(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Delete Product Handler
+  const handleDeleteProduct = async () => {
+    if (!productToDelete) return;
+    setDeletingProductId(productToDelete.id);
+    try {
+      await deleteAdminProductFn({ data: { productId: productToDelete.id } });
+      toast.success(`Product "${productToDelete.name}" deleted successfully.`);
+      setProductToDelete(null);
+      const res = await getAdminProductsFn();
+      setProductsData(res);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete product.");
+    } finally {
+      setDeletingProductId(null);
+    }
+  };
+
   // Update Product handler
   const handleUpdateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -543,6 +639,7 @@ function AdminDashboardPage() {
           categoryId: editingProduct.categoryId,
           status: editingProduct.status,
           isFeatured: editingProduct.isFeatured,
+          imageUrl: editingProduct.image,
         },
       });
 
@@ -1167,11 +1264,15 @@ function AdminDashboardPage() {
                   <p className="text-xs text-[#9D968D] mt-1">Manage luxury combs, detanglers, paddle brushes, prices and status.</p>
                 </div>
                 <button
-                  onClick={() => setShowCreateProductModal(true)}
+                  onClick={() => {
+                    setNewProdImageUrl("/assets/hero-comb.jpg");
+                    setImageFileName(null);
+                    setShowCreateProductModal(true);
+                  }}
                   className="bg-[#C59B63] hover:bg-[#d6a96f] text-[#1B1816] px-4 py-2.5 rounded text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 self-start transition-colors"
                 >
                   <Plus size={16} />
-                  <span>Create Creation</span>
+                  <span>+ Add New Product</span>
                 </button>
               </div>
 
@@ -1236,13 +1337,24 @@ function AdminDashboardPage() {
                             </span>
                           </td>
                           <td className="p-3.5 text-right">
-                            <button
-                              onClick={() => setEditingProduct(p)}
-                              className="text-[#C59B63] hover:underline inline-flex items-center gap-1"
-                            >
-                              <Edit size={12} />
-                              <span>Edit</span>
-                            </button>
+                            <div className="flex items-center justify-end gap-3">
+                              <button
+                                onClick={() => setEditingProduct(p)}
+                                className="text-[#C59B63] hover:text-[#d6a96f] inline-flex items-center gap-1 hover:underline font-medium"
+                                title="Edit Product Details"
+                              >
+                                <Edit size={12} />
+                                <span>Edit</span>
+                              </button>
+                              <button
+                                onClick={() => setProductToDelete(p)}
+                                className="text-red-400 hover:text-red-300 inline-flex items-center gap-1 hover:underline font-medium"
+                                title="Delete Entire Product"
+                              >
+                                <Trash2 size={12} />
+                                <span>Delete</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2205,16 +2317,54 @@ function AdminDashboardPage() {
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-[#9D968D] uppercase text-[10px] mb-1">Image URL / Path</label>
-                  <input
-                    type="text"
-                    value={newProdImageUrl}
-                    onChange={(e) => setNewProdImageUrl(e.target.value)}
-                    className="w-full border border-[#2C2825] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none"
-                  />
+              <div className="space-y-2">
+                <label className="block text-[#9D968D] uppercase text-[10px] font-semibold tracking-wider">
+                  Product Picture (Upload directly from computer)
+                </label>
+                <div className="border border-dashed border-[#3E3832] hover:border-[#C59B63] rounded p-4 bg-[#151311] transition-colors">
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                    <img
+                      src={newProdImageUrl || "/assets/hero-comb.jpg"}
+                      alt="Product Preview"
+                      className="w-20 h-20 object-cover rounded border border-[#3E3832] bg-[#1B1816]"
+                    />
+                    <div className="flex-1 text-left space-y-1.5">
+                      <p className="text-xs text-[#EFECE6] font-medium truncate max-w-xs">
+                        {imageFileName ? `Loaded: ${imageFileName}` : "Default / Current Image"}
+                      </p>
+                      <p className="text-[10px] text-[#9D968D]">
+                        PNG, JPG, WebP supported. Photo will be saved to product catalog.
+                      </p>
+                      <div className="flex items-center gap-2 pt-1">
+                        <label className="cursor-pointer bg-[#C59B63] hover:bg-[#d6a96f] text-[#1B1816] px-3 py-1.5 rounded text-[10px] font-semibold uppercase tracking-wider inline-flex items-center gap-1.5 transition-colors">
+                          <Upload size={13} />
+                          <span>{imageFileUploading ? "Processing..." : "Upload from Computer"}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            disabled={imageFileUploading}
+                            onChange={(e) => handleImageFileChange(e, false)}
+                            className="hidden"
+                          />
+                        </label>
+                        {imageFileName && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNewProdImageUrl("/assets/hero-comb.jpg");
+                              setImageFileName(null);
+                            }}
+                            className="text-red-400 hover:text-red-300 text-[10px] underline"
+                          >
+                            Reset
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
+            </div>
 
               <div>
                 <label className="block text-[#9D968D] uppercase text-[10px] mb-1">Key Benefits (One per line)</label>
@@ -2279,6 +2429,32 @@ function AdminDashboardPage() {
                 />
               </div>
 
+              <div>
+                <label className="block text-[#9D968D] uppercase text-[10px] mb-1 font-semibold">
+                  Product Picture
+                </label>
+                <div className="flex items-center gap-3 p-3 bg-[#151311] border border-[#2C2825] rounded">
+                  <img
+                    src={editingProduct.image || "/assets/hero-comb.jpg"}
+                    alt={editingProduct.name}
+                    className="w-14 h-14 object-cover rounded border border-[#3E3832]"
+                  />
+                  <div className="flex-1 space-y-1">
+                    <label className="cursor-pointer bg-[#2C2825] hover:bg-[#3E3832] text-[#EFECE6] px-3 py-1.5 rounded text-[10px] font-semibold uppercase tracking-wider inline-flex items-center gap-1.5 transition-colors">
+                      <Upload size={12} />
+                      <span>Upload New Picture from Computer</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleImageFileChange(e, true)}
+                        className="hidden"
+                      />
+                    </label>
+                    <p className="text-[10px] text-[#9D968D]">Upload directly from your device</p>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-[#9D968D] uppercase text-[10px] mb-1">Price (₹)</label>
@@ -2330,6 +2506,49 @@ function AdminDashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM DELETE PRODUCT MODAL */}
+      {productToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4">
+          <div className="bg-[#1B1816] border border-red-900/60 rounded max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-center gap-3 text-red-400 mb-3">
+              <AlertTriangle size={24} />
+              <h3 className="font-serif text-xl text-[#EFECE6]">Delete Product?</h3>
+            </div>
+            <p className="text-xs text-[#B6AFA5] mb-2 leading-relaxed">
+              Are you sure you want to permanently delete <strong className="text-[#EFECE6]">{productToDelete.name}</strong> (SKU: <span className="font-mono text-[#C59B63]">{productToDelete.sku}</span>)?
+            </p>
+            <p className="text-[11px] text-[#9D968D] mb-6">
+              This action cannot be undone. All associated gallery images, customer wishlist items, and cart records will be completely removed from the store.
+            </p>
+            <div className="flex justify-end gap-3 border-t border-[#2C2825] pt-4">
+              <button
+                type="button"
+                onClick={() => setProductToDelete(null)}
+                disabled={!!deletingProductId}
+                className="px-4 py-2 border border-[#3E3832] rounded text-xs text-[#9D968D] hover:text-[#EFECE6] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteProduct}
+                disabled={!!deletingProductId}
+                className="bg-red-700 hover:bg-red-600 text-white px-5 py-2 rounded text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                {deletingProductId ? (
+                  <span>Deleting...</span>
+                ) : (
+                  <>
+                    <Trash2 size={13} />
+                    <span>Confirm Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

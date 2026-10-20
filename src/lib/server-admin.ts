@@ -185,6 +185,7 @@ export const updateAdminProductFn = createServerFn({ method: "POST" })
       categoryId?: string;
       status: "PUBLISHED" | "DRAFT" | "ARCHIVED";
       isFeatured: boolean;
+      imageUrl?: string;
     }) => d,
   )
   .handler(async ({ data }) => {
@@ -210,6 +211,28 @@ export const updateAdminProductFn = createServerFn({ method: "POST" })
       },
     });
 
+    if (data.imageUrl && data.imageUrl.trim()) {
+      const existingImg = await prisma.productImage.findFirst({
+        where: { productId: data.id },
+        orderBy: { sortOrder: "asc" },
+      });
+      if (existingImg) {
+        await prisma.productImage.update({
+          where: { id: existingImg.id },
+          data: { url: data.imageUrl.trim(), alt: data.name },
+        });
+      } else {
+        await prisma.productImage.create({
+          data: {
+            productId: data.id,
+            url: data.imageUrl.trim(),
+            alt: data.name,
+            sortOrder: 0,
+          },
+        });
+      }
+    }
+
     await prisma.auditLog.create({
       data: {
         adminId: admin.id,
@@ -221,6 +244,50 @@ export const updateAdminProductFn = createServerFn({ method: "POST" })
     }).catch(() => {});
 
     return { success: true, updated };
+  });
+
+/**
+ * Completely deletes a product and its cascading dependencies from the store catalog.
+ */
+export const deleteAdminProductFn = createServerFn({ method: "POST" })
+  .validator((d: { productId: string }) => d)
+  .handler(async ({ data }) => {
+    const admin = await verifyAdminCaller();
+
+    const product = await prisma.product.findUnique({
+      where: { id: data.productId },
+      select: { id: true, name: true, sku: true },
+    });
+
+    if (!product) {
+      throw new Error("Product not found or has already been deleted.");
+    }
+
+    // Safely delete cascading records and uncouple historical order items
+    await prisma.$transaction(async (tx) => {
+      await tx.cartItem.deleteMany({ where: { productId: data.productId } });
+      await tx.wishlistItem.deleteMany({ where: { productId: data.productId } });
+      await tx.review.deleteMany({ where: { productId: data.productId } });
+      await tx.productImage.deleteMany({ where: { productId: data.productId } });
+      await tx.productVariant.deleteMany({ where: { productId: data.productId } });
+      await tx.orderItem.updateMany({
+        where: { productId: data.productId },
+        data: { productId: null },
+      });
+      await tx.product.delete({ where: { id: data.productId } });
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        adminId: admin.id,
+        action: "DELETE_PRODUCT",
+        entity: "Product",
+        entityId: product.id,
+        details: { name: product.name, sku: product.sku },
+      },
+    }).catch(() => {});
+
+    return { success: true, deletedId: product.id, name: product.name };
   });
 
 /**

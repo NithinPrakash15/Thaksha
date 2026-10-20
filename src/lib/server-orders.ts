@@ -6,6 +6,7 @@ import {
   createRazorpayOrder,
   verifyRazorpayPaymentSignature,
 } from "./payment-gateways";
+import { sendAdminOrderAlert } from "./notifications";
 
 const SESSION_COOKIE_NAME = "thaksha_session";
 
@@ -329,6 +330,19 @@ export const createOrderAndPaymentFn = createServerFn({ method: "POST" })
       return newOrder;
     });
 
+    // Send immediate order alert to admin phone (8891509026)
+    sendAdminOrderAlert({
+      orderNumber: order.orderNumber,
+      customerName: name,
+      customerPhone: phone,
+      customerEmail: email,
+      totalRupees: pricing.total,
+      items: pricing.items.map((i) => `${i.name} (x${i.quantity})`),
+      city,
+      postal,
+      status: "ORDER_CREATED",
+    }).catch(() => {});
+
     return {
       success: true,
       orderId: order.id,
@@ -471,6 +485,17 @@ export const verifyAndCapturePaymentFn = createServerFn({ method: "POST" })
         },
       }).catch(() => {});
     });
+
+    // Send immediate payment confirmation alert to admin phone (8891509026)
+    sendAdminOrderAlert({
+      orderNumber: order.orderNumber,
+      customerName: user.name || order.email,
+      customerPhone: order.phone || user.phone || "Not specified",
+      customerEmail: order.email,
+      totalRupees: Math.round(order.totalCents / 100),
+      items: order.items.map((i) => `${i.productName} (x${i.quantity})`),
+      status: "PAYMENT_CONFIRMED_PAID",
+    }).catch(() => {});
 
     return {
       success: true,
