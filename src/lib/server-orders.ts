@@ -577,6 +577,8 @@ export const getCustomerOrdersFn = createServerFn({ method: "GET" }).handler(asy
     })),
     trackingNumber: o.trackingNumber,
     carrier: o.carrier,
+    cancelledReason: o.cancelledReason,
+    notes: o.notes,
   }));
 });
 
@@ -630,6 +632,8 @@ export const getOrderDetailFn = createServerFn({ method: "GET" })
       couponCode: order.couponCode,
       trackingNumber: order.trackingNumber,
       carrier: order.carrier,
+      cancelledReason: order.cancelledReason,
+      notes: order.notes,
       address: order.address
         ? {
             name: order.address.name,
@@ -662,6 +666,132 @@ export const getOrderDetailFn = createServerFn({ method: "GET" })
         : null,
     };
   });
+
+/**
+ * Cancels a customer order and queues refund if already paid.
+ * Restocks inventory and notifies customer and administrators.
+ */
+export const cancelCustomerOrderFn = createServerFn({ method: "POST" })
+  .validator((d: { orderId: string; reason?: string }) => d)
+  .handler(async ({ data }) => {
+    const token = getCookie(SESSION_COOKIE_NAME);
+    if (!token) throw new Error("Authentication required to cancel order.");
+
+    const user = await getUserBySessionToken(token);
+    if (!user) throw new Error("Authentication required to cancel order.");
+
+    const order = await prisma.order.findUnique({
+      where: { id: data.orderId },
+      include: { items: true, payments: true },
+    });
+
+    if (!order) {
+      throw new Error("Order not found or already deleted.");
+    }
+
+    if (order.userId !== user.id && user.role !== "ADMIN") {
+      throw new Error("Access Denied: You cannot cancel another customer's order.");
+    }
+
+    if (order.status === "CANCELLED" || order.status === "REFUNDED") {
+      throw new Error("This order has already been cancelled.");
+    }
+
+    if (order.status === "SHIPPED" || order.status === "DELIVERED") {
+      throw new Error(
+        `Cannot cancel order once it has been ${order.status.toLowerCase()}. Please contact customer support for returns.`
+      );
+    }
+
+    const wasPaid =
+      order.status === "PAID" ||
+      order.payments.some((p) => p.status === "CAPTURED" || p.status === "AUTHORIZED");
+    const totalRupees = Math.round(order.totalCents / 100);
+    const cancelReason = data.reason?.trim() || "Customer requested cancellation before shipment";
+
+    // 1. Transactional Update: Set status to CANCELLED, save reason & refund note, and restock products
+    await prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          status: "CANCELLED",
+          cancelledReason: cancelReason,
+          notes: wasPaid
+            ? `[REFUND_PENDING] Customer cancelled paid order on ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}. Action Required: Process refund of ₹${totalRupees}.`
+            : `Customer cancelled order on ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}.`,
+        },
+      });
+
+      // Restock inventory for items in this order
+      for (const item of order.items) {
+        if (item.productId) {
+          await tx.product
+            .update({
+              where: { id: item.productId },
+              data: { stock: { increment: item.quantity } },
+            })
+            .catch(() => {});
+        }
+      }
+    });
+
+    // 2. Customer In-App Notification
+    await prisma.notification
+      .create({
+        data: {
+          userId: user.id,
+          title: `Order Cancelled: #${order.orderNumber}`,
+          message: wasPaid
+            ? `Your order #${order.orderNumber} (₹${totalRupees}) has been cancelled. Your refund has been sent for processing and will be returned to source.`
+            : `Your order #${order.orderNumber} has been successfully cancelled.`,
+          type: "ORDER",
+          link: `/orders/${order.id}`,
+        },
+      })
+      .catch(() => {});
+
+    // 3. Admin In-App Notifications
+    const adminUsers = await prisma.user.findMany({
+      where: { role: "ADMIN" },
+      select: { id: true },
+    });
+    for (const adm of adminUsers) {
+      await prisma.notification
+        .create({
+          data: {
+            userId: adm.id,
+            title: wasPaid
+              ? `⚠️ Order Cancelled (REFUND NEEDED): #${order.orderNumber}`
+              : `Order Cancelled: #${order.orderNumber}`,
+            message: wasPaid
+              ? `Customer ${user.name || order.email} cancelled paid order #${order.orderNumber}. REFUND PENDING: ₹${totalRupees}. Reason: ${cancelReason}`
+              : `Customer ${user.name || order.email} cancelled order #${order.orderNumber}.`,
+            type: "ORDER",
+            link: `/admin`,
+          },
+        })
+        .catch(() => {});
+    }
+
+    // 4. Send Instant Admin Alert to Phone (8891509026)
+    sendAdminOrderAlert({
+      orderNumber: order.orderNumber,
+      customerName: user.name || order.email,
+      customerPhone: order.phone || user.phone || "Not specified",
+      customerEmail: order.email,
+      totalRupees,
+      items: order.items.map((i) => i.productName),
+      status: wasPaid ? "CANCELLED (REFUND_PENDING)" : "CANCELLED",
+    }).catch(() => {});
+
+    return {
+      success: true,
+      wasPaid,
+      totalRupees,
+      orderNumber: order.orderNumber,
+    };
+  });
+
 
 /**
  * Retrieves the persistent database cart for an authenticated customer.

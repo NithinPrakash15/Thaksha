@@ -10,6 +10,7 @@ import {
   updateInventoryStockFn,
   getAdminOrdersFn,
   updateAdminOrderStatusFn,
+  processAdminRefundFn,
   getAdminCustomersFn,
   getAdminCouponsFn,
   createAdminCouponFn,
@@ -62,6 +63,9 @@ import {
   Mail,
   User,
   Sparkles,
+  RefreshCw,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 
@@ -685,6 +689,31 @@ function AdminDashboardPage() {
       setOrders(res);
     } catch (err: any) {
       toast.error(err?.message || "Failed to update order status.");
+    }
+  };
+
+  const [processingRefund, setProcessingRefund] = useState(false);
+
+  // Process refund handler
+  const handleProcessRefund = async (orderId: string) => {
+    setProcessingRefund(true);
+    try {
+      const res = await processAdminRefundFn({
+        data: {
+          orderId,
+          refundNotes: "Refund processed and reversed to customer original payment method by admin.",
+        },
+      });
+      if (res.success) {
+        toast.success(`Refund recorded for order #${res.orderNumber}! Status updated to REFUNDED.`);
+        setSelectedOrder(null);
+        const resOrders = await getAdminOrdersFn();
+        setOrders(resOrders);
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to process refund.");
+    } finally {
+      setProcessingRefund(false);
     }
   };
 
@@ -1460,7 +1489,8 @@ function AdminDashboardPage() {
                     <option value="PROCESSING">Processing</option>
                     <option value="SHIPPED">Shipped</option>
                     <option value="DELIVERED">Delivered</option>
-                    <option value="CANCELLED">Cancelled</option>
+                    <option value="CANCELLED">Cancelled / Refund Due</option>
+                    <option value="REFUNDED">Refunded</option>
                   </select>
                 </div>
               </div>
@@ -1501,17 +1531,33 @@ function AdminDashboardPage() {
                               {o.items.map((i: any) => `${i.name} (${i.quantity})`).join(", ")}
                             </td>
                             <td className="p-3.5">
-                              <span
-                                className={`px-2 py-0.5 rounded text-[9px] uppercase tracking-wider font-semibold ${
-                                  o.status === "DELIVERED"
-                                    ? "bg-green-950 text-green-300 border border-green-800"
-                                    : o.status === "SHIPPED"
-                                      ? "bg-blue-950 text-blue-300 border border-blue-800"
-                                      : "bg-amber-950 text-amber-300 border border-amber-800"
-                                }`}
-                              >
-                                {o.status}
-                              </span>
+                              <div className="flex flex-col gap-1 items-start">
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[9px] uppercase tracking-wider font-semibold ${
+                                    o.status === "DELIVERED"
+                                      ? "bg-green-950 text-green-300 border border-green-800"
+                                      : o.status === "SHIPPED"
+                                        ? "bg-blue-950 text-blue-300 border border-blue-800"
+                                        : o.status === "REFUNDED"
+                                          ? "bg-purple-950 text-purple-300 border border-purple-800"
+                                          : o.status === "CANCELLED"
+                                            ? "bg-red-950 text-red-300 border border-red-800"
+                                            : "bg-amber-950 text-amber-300 border border-amber-800"
+                                  }`}
+                                >
+                                  {o.status}
+                                </span>
+                                {o.status === "CANCELLED" && (o.notes?.includes("REFUND_PENDING") || o.paymentStatus === "CAPTURED" || o.paymentStatus === "PAID") && (
+                                  <span className="inline-flex items-center gap-1 bg-red-900/70 text-red-200 border border-red-700 px-1.5 py-0.5 rounded text-[8px] font-bold tracking-wide animate-pulse">
+                                    <AlertCircle size={9} /> REFUND DUE
+                                  </span>
+                                )}
+                                {o.cancelledReason && (
+                                  <span className="text-[9px] text-[#9D968D] line-clamp-1 italic max-w-[150px]" title={o.cancelledReason}>
+                                    "{o.cancelledReason}"
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="p-3.5">
                               <div className="space-y-1">
@@ -1520,9 +1566,11 @@ function AdminDashboardPage() {
                                     className={`px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider font-semibold ${
                                       o.paymentStatus === "CAPTURED" || o.paymentStatus === "PAID"
                                         ? "bg-emerald-950 text-emerald-300 border border-emerald-800"
-                                        : o.paymentStatus === "FAILED"
-                                          ? "bg-red-950 text-red-300 border border-red-800"
-                                          : "bg-amber-950 text-amber-300 border border-amber-800"
+                                        : o.paymentStatus === "REFUNDED"
+                                          ? "bg-purple-950 text-purple-300 border border-purple-800"
+                                          : o.paymentStatus === "FAILED"
+                                            ? "bg-red-950 text-red-300 border border-red-800"
+                                            : "bg-amber-950 text-amber-300 border border-amber-800"
                                     }`}
                                   >
                                     {o.paymentStatus || "PENDING"}
@@ -1546,17 +1594,30 @@ function AdminDashboardPage() {
                               {formatRupees(o.totalRupees)}
                             </td>
                             <td className="p-3.5 text-right">
-                              <button
-                                onClick={() => {
-                                  setSelectedOrder(o);
-                                  setUpdatingStatus(o.status);
-                                  setTrackingInput(o.trackingNumber || "");
-                                  setCarrierInput(o.carrier || "BlueDart Express Air");
-                                }}
-                                className="bg-[#2A2521] hover:bg-[#3E3832] text-[#EFECE6] px-3 py-1.5 rounded text-[10px] uppercase tracking-wider font-semibold border border-[#3E3832]"
-                              >
-                                Update Status
-                              </button>
+                              <div className="flex flex-col items-end gap-1.5">
+                                <button
+                                  onClick={() => {
+                                    setSelectedOrder(o);
+                                    setUpdatingStatus(o.status);
+                                    setTrackingInput(o.trackingNumber || "");
+                                    setCarrierInput(o.carrier || "BlueDart Express Air");
+                                  }}
+                                  className="bg-[#2A2521] hover:bg-[#3E3832] text-[#EFECE6] px-3 py-1.5 rounded text-[10px] uppercase tracking-wider font-semibold border border-[#3E3832]"
+                                >
+                                  {o.status === "CANCELLED" ? "Review / Refund" : "Update Status"}
+                                </button>
+                                {o.status === "CANCELLED" && (o.notes?.includes("REFUND_PENDING") || o.paymentStatus === "CAPTURED" || o.paymentStatus === "PAID") && (
+                                  <button
+                                    onClick={() => handleProcessRefund(o.id)}
+                                    disabled={processingRefund}
+                                    className="bg-red-900/60 hover:bg-red-800 text-red-200 border border-red-600/80 px-2.5 py-1 rounded text-[9px] uppercase tracking-wider font-bold flex items-center gap-1 transition-all disabled:opacity-50"
+                                    title="Process and mark refund complete"
+                                  >
+                                    <RefreshCw size={10} className={processingRefund ? "animate-spin" : ""} />
+                                    Process Refund
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -2571,6 +2632,63 @@ function AdminDashboardPage() {
                 <p><strong>Total:</strong> {formatRupees(selectedOrder.totalRupees)}</p>
               </div>
 
+              {/* Cancellation & Refund Review Box */}
+              {selectedOrder.status === "CANCELLED" && (
+                <div className="p-3.5 bg-red-950/40 border border-red-800/80 rounded space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-red-400 font-bold text-xs flex items-center gap-1.5">
+                      <AlertCircle size={14} /> ORDER CANCELLED BY CUSTOMER
+                    </span>
+                    <span className="text-[10px] bg-red-900/80 text-red-200 px-2 py-0.5 rounded border border-red-700 font-mono">
+                      {selectedOrder.notes?.includes("REFUND_PENDING") || selectedOrder.paymentStatus === "CAPTURED" || selectedOrder.paymentStatus === "PAID"
+                        ? "REFUND REQUIRED"
+                        : "NO REFUND NEEDED"}
+                    </span>
+                  </div>
+
+                  {selectedOrder.cancelledReason && (
+                    <div className="bg-[#151311] p-2 rounded border border-red-900/60">
+                      <p className="text-[10px] text-[#9D968D] uppercase font-semibold">Customer Cancellation Reason:</p>
+                      <p className="text-xs text-red-200 italic mt-0.5 font-medium">"{selectedOrder.cancelledReason}"</p>
+                    </div>
+                  )}
+
+                  {selectedOrder.notes && (
+                    <p className="text-[10px] text-[#9D968D]">
+                      <strong>Internal Notes:</strong> {selectedOrder.notes}
+                    </p>
+                  )}
+
+                  {(selectedOrder.notes?.includes("REFUND_PENDING") || selectedOrder.paymentStatus === "CAPTURED" || selectedOrder.paymentStatus === "PAID") && (
+                    <div className="pt-2 border-t border-red-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <p className="text-xs text-red-200 font-semibold">Refund Amount Due: {formatRupees(selectedOrder.totalRupees)}</p>
+                        <p className="text-[10px] text-[#9D968D]">Reverses charge to customer's original account.</p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={processingRefund}
+                        onClick={() => handleProcessRefund(selectedOrder.id)}
+                        className="bg-red-700 hover:bg-red-600 text-white px-3.5 py-2 rounded text-xs font-semibold flex items-center justify-center gap-1.5 shadow transition-all disabled:opacity-50"
+                      >
+                        {processingRefund ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                        Process & Mark Refunded
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedOrder.status === "REFUNDED" && (
+                <div className="p-3 bg-purple-950/40 border border-purple-800 rounded text-purple-200 text-xs flex items-center gap-2">
+                  <CheckCircle2 size={16} className="text-purple-400 shrink-0" />
+                  <div>
+                    <p className="font-semibold">Refund Completed</p>
+                    <p className="text-[10px] text-purple-300">This order has been officially refunded and restocked.</p>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block text-[#9D968D] uppercase text-[10px] mb-1">Update Status</label>
                 <select
@@ -2583,6 +2701,7 @@ function AdminDashboardPage() {
                   <option value="SHIPPED">SHIPPED</option>
                   <option value="DELIVERED">DELIVERED</option>
                   <option value="CANCELLED">CANCELLED</option>
+                  <option value="REFUNDED">REFUNDED</option>
                 </select>
               </div>
 

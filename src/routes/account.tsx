@@ -171,10 +171,16 @@ function AccountPage() {
                               ? "bg-green-100 text-green-900 border border-green-200"
                               : ord.status === "SHIPPED"
                                 ? "bg-blue-100 text-blue-900 border border-blue-200"
-                                : "bg-amber-100 text-amber-900 border border-amber-200"
+                                : ord.status === "REFUNDED"
+                                  ? "bg-purple-100 text-purple-900 border border-purple-200"
+                                  : ord.status === "CANCELLED"
+                                    ? "bg-red-100 text-red-900 border border-red-200"
+                                    : "bg-amber-100 text-amber-900 border border-amber-200"
                           }`}
                         >
-                          {ord.status}
+                          {ord.status === "CANCELLED" && ord.notes?.includes("REFUND_PENDING")
+                            ? "CANCELLED (REFUND IN PROGRESS)"
+                            : ord.status}
                         </span>
                       </div>
                       <p className="text-xs text-brand-primary/60">

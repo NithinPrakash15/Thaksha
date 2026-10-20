@@ -356,6 +356,8 @@ export const getAdminOrdersFn = createServerFn({ method: "GET" }).handler(async 
     transactionId: o.payments[0]?.transactionId || o.payments[0]?.reference || "—",
     trackingNumber: o.trackingNumber,
     carrier: o.carrier,
+    cancelledReason: o.cancelledReason,
+    notes: o.notes,
     date: o.createdAt.toLocaleDateString("en-IN", {
       year: "numeric",
       month: "short",
@@ -386,21 +388,33 @@ export const updateAdminOrderStatusFn = createServerFn({ method: "POST" })
         status: data.status,
         trackingNumber: data.trackingNumber || null,
         carrier: data.carrier || null,
-        cancelledReason: data.cancelledReason || null,
+        cancelledReason: data.cancelledReason || undefined,
+        notes: data.status === "REFUNDED" ? `[REFUND_COMPLETED] Refund processed by admin on ${new Date().toISOString()}` : undefined,
       },
-      include: { user: true },
+      include: { user: true, payments: true },
     });
+
+    // If order was marked as REFUNDED, update payments to REFUNDED as well
+    if (data.status === "REFUNDED") {
+      await prisma.payment.updateMany({
+        where: { orderId: order.id },
+        data: { status: "REFUNDED" },
+      }).catch(() => {});
+    }
 
     // Notify customer
     if (order.userId) {
+      const refundMessage = `Refund Completed for Order #${order.orderNumber}: ₹${Math.round(order.totalCents / 100)} has been credited back to your original payment method.`;
+      const standardMessage = `Your order status has changed to ${data.status}.${
+        data.trackingNumber ? ` Airway Bill / Tracking: ${data.trackingNumber} (${data.carrier || "BlueDart"})` : ""
+      }`;
+
       await prisma.notification.create({
         data: {
           userId: order.userId,
-          title: `Order Update: ${order.orderNumber}`,
-          message: `Your order status has changed to ${data.status}.${
-            data.trackingNumber ? ` Airway Bill / Tracking: ${data.trackingNumber} (${data.carrier || "BlueDart"})` : ""
-          }`,
-          type: "ORDER",
+          title: data.status === "REFUNDED" ? `Refund Processed: #${order.orderNumber}` : `Order Update: #${order.orderNumber}`,
+          message: data.status === "REFUNDED" ? refundMessage : standardMessage,
+          type: data.status === "REFUNDED" ? "PAYMENT" : "ORDER",
           link: `/orders/${order.id}`,
         },
       }).catch(() => {});
@@ -409,14 +423,70 @@ export const updateAdminOrderStatusFn = createServerFn({ method: "POST" })
     await prisma.auditLog.create({
       data: {
         adminId: admin.id,
-        action: "UPDATE_ORDER_STATUS",
+        action: data.status === "REFUNDED" ? "PROCESS_REFUND" : "UPDATE_ORDER_STATUS",
         entity: "Order",
         entityId: order.id,
-        details: { newStatus: data.status, trackingNumber: data.trackingNumber },
+        details: { newStatus: data.status, trackingNumber: data.trackingNumber, reason: data.cancelledReason },
       },
     }).catch(() => {});
 
     return { success: true };
+  });
+
+/**
+ * Direct administrative refund action to mark an order and its payments as refunded.
+ */
+export const processAdminRefundFn = createServerFn({ method: "POST" })
+  .validator((d: { orderId: string; refundNotes?: string }) => d)
+  .handler(async ({ data }) => {
+    const admin = await verifyAdminCaller();
+
+    const order = await prisma.order.findUnique({
+      where: { id: data.orderId },
+      include: { payments: true, user: true },
+    });
+
+    if (!order) throw new Error("Order not found.");
+
+    await prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          status: "REFUNDED",
+          notes: `[REFUND_PROCESSED] Refund of ₹${Math.round(order.totalCents / 100)} confirmed by admin on ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}. ${data.refundNotes || ""}`,
+        },
+      });
+
+      await tx.payment.updateMany({
+        where: { orderId: order.id },
+        data: { status: "REFUNDED" },
+      });
+    });
+
+    // Notify customer
+    if (order.userId) {
+      await prisma.notification.create({
+        data: {
+          userId: order.userId,
+          title: `Refund Completed: #${order.orderNumber}`,
+          message: `Your refund of ₹${Math.round(order.totalCents / 100)} for Order #${order.orderNumber} has been successfully processed and returned to your original payment source.`,
+          type: "PAYMENT",
+          link: `/orders/${order.id}`,
+        },
+      }).catch(() => {});
+    }
+
+    await prisma.auditLog.create({
+      data: {
+        adminId: admin.id,
+        action: "PROCESS_REFUND",
+        entity: "Order",
+        entityId: order.id,
+        details: { totalRupees: Math.round(order.totalCents / 100), refundNotes: data.refundNotes },
+      },
+    }).catch(() => {});
+
+    return { success: true, orderNumber: order.orderNumber };
   });
 
 /**
