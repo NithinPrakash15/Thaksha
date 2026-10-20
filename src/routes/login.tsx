@@ -117,8 +117,15 @@ function LoginPage() {
     setGoogleLoading(true);
     setError(null);
 
-    // Initialize Google One Tap / Sign In client if client ID is set
-    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "1083921839281-dummy.apps.googleusercontent.com";
+    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+    if (!googleClientId || googleClientId.includes("dummy")) {
+      setGoogleLoading(false);
+      const msg = "Google Sign-In is not configured yet. Please configure VITE_GOOGLE_CLIENT_ID in your environment or sign in with your email & password below.";
+      setError(msg);
+      toast.error("Google Client ID not configured. Please use email & password.");
+      return;
+    }
 
     if (window.google?.accounts?.id) {
       window.google.accounts.id.initialize({
