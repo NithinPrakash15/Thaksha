@@ -6,8 +6,10 @@ Premium e-commerce storefront built with TanStack Start, React, TypeScript, Tail
 
 - Luxury responsive storefront
 - Product catalog, product detail pages, search, wishlist, persistent cart
-- Checkout flow with order confirmation in sandbox/manual payment mode
-- Account and admin dashboard foundations
+- Production Checkout flow with live Razorpay payment gateway
+- Admin catalog controls with complete product deletion and direct photo upload
+- Instant order dispatch alerts to store admin (8891509026)
+- Account and admin dashboard with custom credential management and Google OAuth
 - SEO metadata, sitemap route, robots.txt
 - Prisma PostgreSQL schema for users, products, orders, payments, reviews, wishlist, sessions
 - Dockerfile and environment template
