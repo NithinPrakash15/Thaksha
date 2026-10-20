@@ -117,7 +117,9 @@ function LoginPage() {
     setGoogleLoading(true);
     setError(null);
 
-    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    const googleClientId =
+      import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+      "182912295682-sia8ggb0ooo3u9t2ffobvuhku8tgbrnk.apps.googleusercontent.com";
 
     if (!googleClientId || googleClientId.includes("dummy")) {
       setGoogleLoading(false);
