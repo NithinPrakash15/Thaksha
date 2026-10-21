@@ -12,9 +12,7 @@ import { toast } from "sonner";
 import { ShieldCheck, Sparkles, Truck, Award } from "lucide-react";
 import {
   useIsLaunchDay,
-  LaunchInauguralSash,
   LaunchAmbientDust,
-  LaunchCeremonialRibbon,
 } from "@/components/LaunchCelebration";
 
 export const Route = createFileRoute("/")({
@@ -68,8 +66,6 @@ function Index() {
     <Shell>
       <div className="min-h-screen bg-brand-cream text-brand-ink font-sans">
         <main>
-          {/* Interactive Ceremonial Ribbon-Cutting Unveiling */}
-          <LaunchCeremonialRibbon />
           <Hero products={products} />
           <Marquee />
           <TrustIndicators />
@@ -163,7 +159,7 @@ function Hero({ products }: { products: DbProductSummary[] }) {
         {isLaunchDay && (
           <div className="mb-4 inline-flex items-center gap-2 bg-[#C59B63]/15 border border-[#C59B63]/40 px-3.5 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.28em] text-brand-oak shadow-sm">
             <Sparkles size={12} className="text-[#C59B63] animate-pulse" />
-            <span>Official Inauguration • The Maiden Collection</span>
+            <span>Official Inauguration • Handcrafted Neem Rituals</span>
           </div>
         )}
         <span className="mb-4 block text-[11px] font-semibold uppercase tracking-[0.3em] text-brand-sage">
@@ -218,9 +214,6 @@ function Hero({ products }: { products: DbProductSummary[] }) {
               : "border border-brand-primary/10"
           }`}
         >
-          {/* Diagonal Inaugural Corner Sash */}
-          <LaunchInauguralSash />
-
           <img
             src={heroImage}
             alt={product.name}
@@ -256,7 +249,7 @@ function Marquee() {
         "Inaugural Debut • October 2026",
         "Hand-Sculpted in Kerala",
         "100% Solid Mature Neem",
-        "The Maiden Collection",
+        "Artisanal Woodcraft",
         "Botanically Cured",
         "Lifetime Form Guarantee",
       ]

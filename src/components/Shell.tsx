@@ -56,10 +56,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (isLaunchDay) {
-      setShowIntro(false);
-      return;
-    }
     const seen = window.sessionStorage.getItem("thaksha.logoIntroSeen");
     if (!seen) {
       setShowIntro(true);
@@ -69,7 +65,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       }, 2500);
       return () => window.clearTimeout(timer);
     }
-  }, [isLaunchDay]);
+  }, []);
 
   const enterSite = () => {
     window.sessionStorage.setItem("thaksha.logoIntroSeen", "true");
