@@ -9,6 +9,7 @@ import {
   LaunchTopBar,
   LaunchConfetti,
   LaunchFloatingBadge,
+  LaunchClickSparkles,
   useIsLaunchDay,
 } from "./LaunchCelebration";
 
@@ -103,6 +104,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       {/* Luxury Golden Confetti Burst (First visit on Launch Day only) */}
       <LaunchConfetti />
+
+      {/* Interactive Golden Click Sparkles */}
+      <LaunchClickSparkles />
 
       {/* Top Announcement Bar (Grand Launch celebration or standard) */}
       {isLaunchDay ? (

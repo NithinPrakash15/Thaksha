@@ -3,6 +3,7 @@ import { Heart, ShoppingBag } from "lucide-react";
 import { addToCart, toggleWishlist, getWishlist } from "@/lib/store";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
+import { useIsLaunchDay } from "./LaunchCelebration";
 
 export type CardProduct = {
   slug: string;
@@ -25,6 +26,7 @@ export const formatPrice = (value: number) =>
   }).format(value);
 
 export function ProductCard({ product }: { product: CardProduct }) {
+  const isLaunchDay = useIsLaunchDay();
   const [inWishlist, setInWishlist] = useState(false);
 
   useEffect(() => {
@@ -101,6 +103,12 @@ export function ProductCard({ product }: { product: CardProduct }) {
                 </span>
               )}
             </div>
+
+            {isLaunchDay && (
+              <span className="absolute right-4 top-4 bg-[#141210]/95 text-[#E5C38E] border border-[#C59B63]/60 text-[8px] font-serif uppercase tracking-[0.25em] px-2.5 py-1 backdrop-blur-md shadow-md font-semibold">
+                ⚜️ Maiden Batch
+              </span>
+            )}
 
             {product.category && (
               <span className="absolute right-4 bottom-4 bg-brand-primary/80 text-brand-cream text-[9px] uppercase tracking-[0.2em] px-2.5 py-1 backdrop-blur-sm">

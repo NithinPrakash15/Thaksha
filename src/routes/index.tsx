@@ -10,7 +10,11 @@ import { getCatalogProductsFn, formatRupees, type DbProductSummary } from "@/lib
 import { addToCart } from "@/lib/store";
 import { toast } from "sonner";
 import { ShieldCheck, Sparkles, Truck, Award } from "lucide-react";
-import { useIsLaunchDay } from "@/components/LaunchCelebration";
+import {
+  useIsLaunchDay,
+  LaunchInauguralSash,
+  LaunchAmbientDust,
+} from "@/components/LaunchCelebration";
 
 export const Route = createFileRoute("/")({
   loader: async () => {
@@ -147,9 +151,12 @@ function Hero({ products }: { products: DbProductSummary[] }) {
   return (
     <section
       id="top"
-      className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-6 pb-20 pt-12 md:px-10 lg:grid-cols-12"
+      className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-6 pb-20 pt-12 md:px-10 lg:grid-cols-12 overflow-hidden"
     >
-      <div className="order-2 lg:order-1 lg:col-span-5">
+      {/* Ambient Starlight Golden Aura (Launch Day Only) */}
+      <LaunchAmbientDust />
+
+      <div className="order-2 lg:order-1 lg:col-span-5 relative z-10">
         {isLaunchDay && (
           <div className="mb-4 inline-flex items-center gap-2 bg-[#C59B63]/15 border border-[#C59B63]/40 px-3.5 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.28em] text-brand-oak shadow-sm">
             <Sparkles size={12} className="text-[#C59B63] animate-pulse" />
@@ -200,8 +207,17 @@ function Hero({ products }: { products: DbProductSummary[] }) {
         )}
       </div>
 
-      <div className="order-1 lg:order-2 lg:col-span-7">
-        <div className="relative aspect-[4/5] w-full overflow-hidden border border-brand-primary/10 shadow-lg bg-brand-sage-soft/20">
+      <div className="order-1 lg:order-2 lg:col-span-7 relative z-10">
+        <div
+          className={`relative aspect-[4/5] w-full overflow-hidden shadow-xl bg-brand-sage-soft/20 transition-all ${
+            isLaunchDay
+              ? "border border-[#C59B63]/60 ring-1 ring-[#C59B63]/30 shadow-[0_0_50px_rgba(197,155,99,0.18)]"
+              : "border border-brand-primary/10"
+          }`}
+        >
+          {/* Diagonal Inaugural Corner Sash */}
+          <LaunchInauguralSash />
+
           <img
             src={heroImage}
             alt={product.name}
@@ -231,14 +247,24 @@ function Hero({ products }: { products: DbProductSummary[] }) {
 }
 
 function Marquee() {
-  const items = [
-    "Sustainably Harvested",
-    "Seasoned Mature Neem",
-    "Static-Free Grooming",
-    "Anti-Breakage Profile",
-    "Cold-Pressed Botanical Oil Finish",
-    "Lifetime Form Guarantee",
-  ];
+  const isLaunchDay = useIsLaunchDay();
+  const items = isLaunchDay
+    ? [
+        "Inaugural Debut • October 2026",
+        "Hand-Sculpted in Kerala",
+        "100% Solid Mature Neem",
+        "The Maiden Collection",
+        "Botanically Cured",
+        "Lifetime Form Guarantee",
+      ]
+    : [
+        "Sustainably Harvested",
+        "Seasoned Mature Neem",
+        "Static-Free Grooming",
+        "Anti-Breakage Profile",
+        "Cold-Pressed Botanical Oil Finish",
+        "Lifetime Form Guarantee",
+      ];
   return (
     <section
       aria-hidden="true"

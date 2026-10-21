@@ -63,7 +63,7 @@ export function LaunchConfetti() {
     window.addEventListener("resize", onResize);
 
     const colors = ["#C59B63", "#E5C38E", "#F4E3B5", "#8E6934", "#FFF8EE", "#D4AF37"];
-    const particleCount = 80;
+    const particleCount = 85;
 
     const particles = Array.from({ length: particleCount }).map(() => ({
       x: Math.random() * width,
@@ -129,6 +129,79 @@ export function LaunchConfetti() {
       style={{ width: "100vw", height: "100vh" }}
     />
   );
+}
+
+/**
+ * Interactive Golden Click Sparkles (Micro-interaction)
+ * Delicate luxury starburst on cursor click.
+ */
+export function LaunchClickSparkles() {
+  const isLaunch = useIsLaunchDay();
+
+  useEffect(() => {
+    if (!isLaunch) return;
+
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable
+      )
+        return;
+
+      const container = document.createElement("div");
+      container.style.position = "fixed";
+      container.style.left = `${e.clientX}px`;
+      container.style.top = `${e.clientY}px`;
+      container.style.pointerEvents = "none";
+      container.style.zIndex = "9999";
+      document.body.appendChild(container);
+
+      const sparkleCount = 6;
+      for (let i = 0; i < sparkleCount; i++) {
+        const star = document.createElement("div");
+        const angle =
+          (i * (360 / sparkleCount) + Math.random() * 25) * (Math.PI / 180);
+        const distance = Math.random() * 32 + 18;
+        const tx = Math.cos(angle) * distance;
+        const ty = Math.sin(angle) * distance;
+
+        star.innerHTML = "✦";
+        star.style.position = "absolute";
+        star.style.left = "0px";
+        star.style.top = "0px";
+        star.style.color = [
+          "#C59B63",
+          "#E5C38E",
+          "#F4E3B5",
+          "#D4AF37",
+        ][Math.floor(Math.random() * 4)];
+        star.style.fontSize = `${Math.random() * 5 + 10}px`;
+        star.style.lineHeight = "1";
+        star.style.userSelect = "none";
+        star.style.transition = "all 0.55s cubic-bezier(0.16, 1, 0.3, 1)";
+        star.style.transform = "translate(-50%, -50%) scale(1)";
+        star.style.opacity = "1";
+
+        container.appendChild(star);
+
+        requestAnimationFrame(() => {
+          star.style.transform = `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) scale(0)`;
+          star.style.opacity = "0";
+        });
+      }
+
+      setTimeout(() => {
+        container.remove();
+      }, 650);
+    };
+
+    window.addEventListener("click", handleClick);
+    return () => window.removeEventListener("click", handleClick);
+  }, [isLaunch]);
+
+  return null;
 }
 
 /**
@@ -220,5 +293,36 @@ export function LaunchFloatingBadge() {
         </button>
       </div>
     </aside>
+  );
+}
+
+/**
+ * Diagonal Inaugural Corner Sash for Hero Showcase Image
+ */
+export function LaunchInauguralSash() {
+  const isLaunch = useIsLaunchDay();
+  if (!isLaunch) return null;
+
+  return (
+    <div className="absolute -top-1 -right-1 z-30 overflow-hidden w-36 h-36 pointer-events-none">
+      <div className="absolute top-7 -right-10 w-48 bg-gradient-to-r from-[#94713E] via-[#C59B63] to-[#94713E] text-[#141210] py-1 text-center shadow-lg transform rotate-45 text-[9px] font-serif font-extrabold tracking-[0.25em] uppercase border-y border-[#F3EFEA]/30">
+        ⚜️ Maiden Debut
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Ambient Golden Stardust for Hero Background
+ */
+export function LaunchAmbientDust() {
+  const isLaunch = useIsLaunchDay();
+  if (!isLaunch) return null;
+
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-[radial-gradient(circle,rgba(197,155,99,0.12)_0,transparent_70%)] blur-3xl animate-pulse" />
+      <div className="absolute top-1/3 right-1/4 w-80 h-80 bg-[radial-gradient(circle,rgba(229,195,142,0.10)_0,transparent_70%)] blur-2xl" />
+    </div>
   );
 }
