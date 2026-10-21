@@ -375,6 +375,9 @@ function AdminDashboardPage() {
   const [newProdStock, setNewProdStock] = useState(25);
   const [newProdCategory, setNewProdCategory] = useState("");
   const [newProdImageUrl, setNewProdImageUrl] = useState("/assets/hero-comb.jpg");
+  const [newProdImages, setNewProdImages] = useState<string[]>(["/assets/hero-comb.jpg"]);
+  const [newProdUrlInput, setNewProdUrlInput] = useState("");
+  const [editProdUrlInput, setEditProdUrlInput] = useState("");
   const [imageFileName, setImageFileName] = useState<string | null>(null);
   const [imageFileUploading, setImageFileUploading] = useState(false);
   const [newProdBenefits, setNewProdBenefits] = useState("Handmade from seasoned neem wood\nScalp wellness stimulation");
@@ -571,6 +574,9 @@ function AdminDashboardPage() {
         .map((b) => b.trim())
         .filter(Boolean);
 
+      const validImages = newProdImages.filter((u) => typeof u === "string" && u.trim().length > 0);
+      const finalImages = validImages.length > 0 ? validImages : [newProdImageUrl || "/assets/hero-comb.jpg"];
+
       await createAdminProductFn({
         data: {
           name: newProdName,
@@ -584,13 +590,18 @@ function AdminDashboardPage() {
           categoryId: newProdCategory || undefined,
           status: "PUBLISHED",
           isFeatured: true,
-          imageUrl: newProdImageUrl,
+          imageUrl: finalImages[0],
+          imageUrls: finalImages,
           benefits,
         },
       });
 
-      toast.success("Product created successfully.");
+      toast.success("Product created successfully with gallery pictures.");
       setShowCreateProductModal(false);
+      setNewProdImages(["/assets/hero-comb.jpg"]);
+      setNewProdImageUrl("/assets/hero-comb.jpg");
+      setNewProdUrlInput("");
+      setImageFileName(null);
       // Reload products
       const res = await getAdminProductsFn();
       setProductsData(res);
@@ -599,75 +610,141 @@ function AdminDashboardPage() {
     }
   };
 
-  // Image file upload directly from computer with canvas-based optimization
-  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please select an image file (PNG, JPG, WebP, etc.).");
+  // Add picture via direct web URL (Create Modal)
+  const handleAddCreateImageUrl = () => {
+    const trimmed = newProdUrlInput.trim();
+    if (!trimmed) return;
+    if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://") && !trimmed.startsWith("/")) {
+      toast.error("Please enter a valid URL starting with http://, https://, or /");
       return;
     }
+    setNewProdImages((prev) => {
+      const isOnlyDefault = prev.length === 1 && prev[0] === "/assets/hero-comb.jpg";
+      const updated = isOnlyDefault ? [trimmed] : [...prev, trimmed];
+      setNewProdImageUrl(updated[0]);
+      return updated;
+    });
+    setNewProdUrlInput("");
+    toast.success("Picture URL added to gallery.");
+  };
 
-    if (file.size > 15 * 1024 * 1024) {
-      toast.error("Image file size is too large (maximum 15MB).");
+  // Add picture via direct web URL (Edit Modal)
+  const handleAddEditImageUrl = () => {
+    const trimmed = editProdUrlInput.trim();
+    if (!trimmed) return;
+    if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://") && !trimmed.startsWith("/")) {
+      toast.error("Please enter a valid URL starting with http://, https://, or /");
+      return;
+    }
+    if (!editingProduct) return;
+    const current = Array.isArray(editingProduct.images) && editingProduct.images.length > 0
+      ? editingProduct.images
+      : (editingProduct.image ? [editingProduct.image] : []);
+    const isOnlyDefault = current.length === 1 && current[0] === "/assets/hero-comb.jpg";
+    const updated = isOnlyDefault ? [trimmed] : [...current, trimmed];
+    setEditingProduct({
+      ...editingProduct,
+      images: updated,
+      image: updated[0],
+    });
+    setEditProdUrlInput("");
+    toast.success("Picture URL added to gallery.");
+  };
+
+  // Multi-image file upload directly from computer with canvas-based optimization
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+
+    const files = Array.from(fileList);
+    const validImageFiles = files.filter((f) => f.type.startsWith("image/"));
+    if (validImageFiles.length === 0) {
+      toast.error("Please select valid image files (PNG, JPG, WebP, etc.).");
       return;
     }
 
     setImageFileUploading(true);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const rawDataUrl = event.target?.result as string;
-      const img = new Image();
-      img.onload = () => {
-        const maxDim = 1200;
-        let width = img.width;
-        let height = img.height;
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          const compressed = canvas.toDataURL("image/jpeg", 0.88);
-          if (isEdit) {
-            setEditingProduct((prev: any) => ({ ...prev, image: compressed }));
-          } else {
-            setNewProdImageUrl(compressed);
-            setImageFileName(file.name);
-          }
-          toast.success("Product picture loaded from system.");
-        } else {
-          if (isEdit) {
-            setEditingProduct((prev: any) => ({ ...prev, image: rawDataUrl }));
-          } else {
-            setNewProdImageUrl(rawDataUrl);
-            setImageFileName(file.name);
-          }
-          toast.success("Product picture loaded from system.");
-        }
-        setImageFileUploading(false);
-      };
-      img.onerror = () => {
-        toast.error("Failed to decode image file.");
-        setImageFileUploading(false);
-      };
-      img.src = rawDataUrl;
+    toast.info(`Optimizing ${validImageFiles.length} photo${validImageFiles.length > 1 ? "s" : ""}...`);
+
+    const compressOne = (file: File): Promise<string> => {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const rawDataUrl = event.target?.result as string;
+          const img = new Image();
+          img.onload = () => {
+            const maxDim = 1200;
+            let width = img.width;
+            let height = img.height;
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              } else {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, width, height);
+              resolve(canvas.toDataURL("image/jpeg", 0.88));
+            } else {
+              resolve(rawDataUrl);
+            }
+          };
+          img.onerror = () => resolve(rawDataUrl);
+          img.src = rawDataUrl;
+        };
+        reader.onerror = () => resolve("");
+        reader.readAsDataURL(file);
+      });
     };
-    reader.onerror = () => {
-      toast.error("Failed to read image from computer.");
+
+    try {
+      const results = await Promise.all(validImageFiles.map(compressOne));
+      const successfulImages = results.filter((url) => typeof url === "string" && url.length > 0);
+
+      if (successfulImages.length === 0) {
+        toast.error("Could not process the selected images.");
+        setImageFileUploading(false);
+        return;
+      }
+
+      if (isEdit) {
+        setEditingProduct((prev: any) => {
+          if (!prev) return prev;
+          const existing = Array.isArray(prev.images) && prev.images.length > 0
+            ? prev.images
+            : (prev.image ? [prev.image] : []);
+          const isOnlyDefault = existing.length === 1 && existing[0] === "/assets/hero-comb.jpg";
+          const updated = isOnlyDefault ? successfulImages : [...existing, ...successfulImages];
+          return {
+            ...prev,
+            images: updated,
+            image: updated[0] || prev.image,
+          };
+        });
+        toast.success(`Added ${successfulImages.length} picture${successfulImages.length > 1 ? "s" : ""} to product.`);
+      } else {
+        setNewProdImages((prev) => {
+          const isOnlyDefault = prev.length === 1 && prev[0] === "/assets/hero-comb.jpg";
+          const updated = isOnlyDefault ? successfulImages : [...prev, ...successfulImages];
+          setNewProdImageUrl(updated[0] || "/assets/hero-comb.jpg");
+          return updated;
+        });
+        setImageFileName(`${successfulImages.length} picture${successfulImages.length > 1 ? "s" : ""} loaded`);
+        toast.success(`Loaded ${successfulImages.length} picture${successfulImages.length > 1 ? "s" : ""} from system.`);
+      }
+    } catch {
+      toast.error("Failed to read image files.");
+    } finally {
       setImageFileUploading(false);
-    };
-    reader.readAsDataURL(file);
+      e.target.value = "";
+    }
   };
 
   // Delete Product Handler
@@ -692,6 +769,10 @@ function AdminDashboardPage() {
     e.preventDefault();
     if (!editingProduct) return;
     try {
+      const currentImages = Array.isArray(editingProduct.images) && editingProduct.images.length > 0
+        ? editingProduct.images
+        : (editingProduct.image ? [editingProduct.image] : ["/assets/hero-comb.jpg"]);
+
       await updateAdminProductFn({
         data: {
           id: editingProduct.id,
@@ -704,12 +785,14 @@ function AdminDashboardPage() {
           categoryId: editingProduct.categoryId,
           status: editingProduct.status,
           isFeatured: editingProduct.isFeatured,
-          imageUrl: editingProduct.image,
+          imageUrl: currentImages[0],
+          imageUrls: currentImages,
         },
       });
 
-      toast.success("Product updated.");
+      toast.success("Product updated with multiple pictures.");
       setEditingProduct(null);
+      setEditProdUrlInput("");
       const res = await getAdminProductsFn();
       setProductsData(res);
     } catch (err: any) {
@@ -1397,7 +1480,17 @@ function AdminDashboardPage() {
                       {filteredProducts.map((p) => (
                         <tr key={p.id} className="hover:bg-[#25211E]/50">
                           <td className="p-3.5 flex items-center gap-3">
-                            <img src={p.image} alt={p.name} className="h-10 w-8 object-cover rounded border border-[#3E3832]" />
+                            <div className="relative">
+                              <img src={p.image} alt={p.name} className="h-10 w-8 object-cover rounded border border-[#3E3832]" />
+                              {Array.isArray(p.images) && p.images.length > 1 && (
+                                <span
+                                  className="absolute -bottom-1 -right-1 bg-[#C59B63] text-[#1B1816] text-[8px] font-bold px-1 rounded-full shadow"
+                                  title={`${p.images.length} gallery pictures`}
+                                >
+                                  {p.images.length}
+                                </span>
+                              )}
+                            </div>
                             <div>
                               <p className="font-serif text-sm font-semibold text-[#EFECE6]">{p.name}</p>
                               <p className="text-[10px] text-[#9D968D] line-clamp-1">{p.tagline}</p>
@@ -1429,7 +1522,12 @@ function AdminDashboardPage() {
                           <td className="p-3.5 text-right">
                             <div className="flex items-center justify-end gap-3">
                               <button
-                                onClick={() => setEditingProduct(p)}
+                                onClick={() =>
+                                  setEditingProduct({
+                                    ...p,
+                                    images: Array.isArray(p.images) && p.images.length > 0 ? p.images : [p.image || "/assets/hero-comb.jpg"],
+                                  })
+                                }
                                 className="text-[#C59B63] hover:text-[#d6a96f] inline-flex items-center gap-1 hover:underline font-medium"
                                 title="Edit Product Details"
                               >
@@ -2644,69 +2742,154 @@ function AdminDashboardPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[#9D968D] uppercase text-[10px] mb-1">Category</label>
-                  <select
-                    value={newProdCategory}
-                    onChange={(e) => setNewProdCategory(e.target.value)}
-                    className="w-full border border-[#2C2825] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none"
-                  >
-                    {productsData.categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              <div className="space-y-2">
-                <label className="block text-[#9D968D] uppercase text-[10px] font-semibold tracking-wider">
-                  Product Picture (Upload directly from computer)
-                </label>
-                <div className="border border-dashed border-[#3E3832] hover:border-[#C59B63] rounded p-4 bg-[#151311] transition-colors">
-                  <div className="flex flex-col sm:flex-row items-center gap-4">
-                    <img
-                      src={newProdImageUrl || "/assets/hero-comb.jpg"}
-                      alt="Product Preview"
-                      className="w-20 h-20 object-cover rounded border border-[#3E3832] bg-[#1B1816]"
+              <div>
+                <label className="block text-[#9D968D] uppercase text-[10px] mb-1">Category</label>
+                <select
+                  value={newProdCategory}
+                  onChange={(e) => setNewProdCategory(e.target.value)}
+                  className="w-full border border-[#2C2825] bg-[#151311] p-3 text-[#EFECE6] rounded outline-none"
+                >
+                  {productsData.categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* PRODUCT PICTURES GALLERY SECTION */}
+              <div className="border border-[#2C2825] bg-[#151311] rounded p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#24201D] pb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[#EFECE6] font-semibold text-xs uppercase tracking-wider">
+                        Product Pictures & Gallery
+                      </span>
+                      <span className="bg-[#2C2825] text-[#C59B63] px-2 py-0.5 rounded text-[10px] font-mono font-bold">
+                        {newProdImages.length} {newProdImages.length === 1 ? "Photo" : "Photos"}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-[#9D968D] mt-0.5">
+                      First image is the main storefront cover. Click "Set as Cover" to reorder. Multiple pictures show in the product gallery.
+                    </p>
+                  </div>
+
+                  <label className="cursor-pointer bg-[#C59B63] hover:bg-[#d6a96f] text-[#1B1816] px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1.5 transition-colors">
+                    <Upload size={13} />
+                    <span>{imageFileUploading ? "Processing..." : "Upload Photos"}</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      disabled={imageFileUploading}
+                      onChange={(e) => handleImageFileChange(e, false)}
+                      className="hidden"
                     />
-                    <div className="flex-1 text-left space-y-1.5">
-                      <p className="text-xs text-[#EFECE6] font-medium truncate max-w-xs">
-                        {imageFileName ? `Loaded: ${imageFileName}` : "Default / Current Image"}
-                      </p>
-                      <p className="text-[10px] text-[#9D968D]">
-                        PNG, JPG, WebP supported. Photo will be saved to product catalog.
-                      </p>
-                      <div className="flex items-center gap-2 pt-1">
-                        <label className="cursor-pointer bg-[#C59B63] hover:bg-[#d6a96f] text-[#1B1816] px-3 py-1.5 rounded text-[10px] font-semibold uppercase tracking-wider inline-flex items-center gap-1.5 transition-colors">
-                          <Upload size={13} />
-                          <span>{imageFileUploading ? "Processing..." : "Upload from Computer"}</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            disabled={imageFileUploading}
-                            onChange={(e) => handleImageFileChange(e, false)}
-                            className="hidden"
-                          />
-                        </label>
-                        {imageFileName && (
+                  </label>
+                </div>
+
+                {/* Gallery Thumbnails Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3 pt-1">
+                  {newProdImages.map((imgUrl, idx) => (
+                    <div
+                      key={idx}
+                      className={`relative group rounded border overflow-hidden bg-[#1B1816] aspect-square flex flex-col items-center justify-center ${
+                        idx === 0 ? "border-[#C59B63] ring-1 ring-[#C59B63]/40" : "border-[#3E3832]"
+                      }`}
+                    >
+                      <img src={imgUrl} alt={`Product ${idx + 1}`} className="w-full h-full object-cover" />
+
+                      {/* Cover Badge */}
+                      <div className="absolute top-1 left-1">
+                        {idx === 0 ? (
+                          <span className="bg-[#C59B63] text-[#1B1816] text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
+                            ★ Cover
+                          </span>
+                        ) : (
+                          <span className="bg-black/70 text-[#B6AFA5] text-[9px] px-1 py-0.5 rounded font-mono">
+                            #{idx + 1}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Action buttons overlay on hover */}
+                      <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-1.5">
+                        {idx !== 0 && (
                           <button
                             type="button"
                             onClick={() => {
-                              setNewProdImageUrl("/assets/hero-comb.jpg");
-                              setImageFileName(null);
+                              const updated = [...newProdImages];
+                              const [selected] = updated.splice(idx, 1);
+                              updated.unshift(selected);
+                              setNewProdImages(updated);
+                              setNewProdImageUrl(updated[0]);
                             }}
-                            className="text-red-400 hover:text-red-300 text-[10px] underline"
+                            className="bg-[#C59B63] hover:bg-[#d6a96f] text-[#1B1816] text-[9px] font-semibold px-2 py-1 rounded w-full text-center"
                           >
-                            Reset
+                            Set as Cover
                           </button>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (newProdImages.length === 1) {
+                              setNewProdImages(["/assets/hero-comb.jpg"]);
+                              setNewProdImageUrl("/assets/hero-comb.jpg");
+                              setImageFileName(null);
+                            } else {
+                              const updated = newProdImages.filter((_, i) => i !== idx);
+                              setNewProdImages(updated);
+                              setNewProdImageUrl(updated[0]);
+                            }
+                          }}
+                          className="bg-red-950/80 hover:bg-red-900 text-red-200 border border-red-800 text-[9px] px-2 py-1 rounded w-full flex items-center justify-center gap-1"
+                        >
+                          <Trash2 size={10} />
+                          <span>Remove</span>
+                        </button>
                       </div>
                     </div>
-                  </div>
+                  ))}
+
+                  {/* Add Tile */}
+                  <label className="border border-dashed border-[#3E3832] hover:border-[#C59B63] rounded aspect-square flex flex-col items-center justify-center gap-1.5 cursor-pointer text-[#9D968D] hover:text-[#C59B63] transition-colors p-2 text-center bg-[#151311]">
+                    <Plus size={18} />
+                    <span className="text-[10px] font-medium leading-tight">+ Add Photos</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      disabled={imageFileUploading}
+                      onChange={(e) => handleImageFileChange(e, false)}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {/* Direct Image URL adder */}
+                <div className="flex items-center gap-2 pt-2 border-t border-[#24201D]">
+                  <input
+                    type="url"
+                    placeholder="Or paste an image web link (https://...)..."
+                    value={newProdUrlInput}
+                    onChange={(e) => setNewProdUrlInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddCreateImageUrl();
+                      }
+                    }}
+                    className="flex-1 border border-[#2C2825] bg-[#1E1B18] px-3 py-1.5 text-xs text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddCreateImageUrl}
+                    className="px-3 py-1.5 bg-[#2C2825] hover:bg-[#3E3832] text-[#EFECE6] text-[10px] font-semibold rounded uppercase tracking-wider"
+                  >
+                    Add URL
+                  </button>
                 </div>
               </div>
-            </div>
 
               <div>
                 <label className="block text-[#9D968D] uppercase text-[10px] mb-1">Key Benefits (One per line)</label>
@@ -2741,7 +2924,7 @@ function AdminDashboardPage() {
       {/* EDIT PRODUCT MODAL */}
       {editingProduct && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="bg-[#1B1816] border border-[#3E3832] rounded max-w-xl w-full p-6">
+          <div className="bg-[#1B1816] border border-[#3E3832] rounded max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-[#2C2825] pb-4 mb-4">
               <h3 className="font-serif text-2xl text-[#EFECE6]">Edit {editingProduct.name}</h3>
               <button onClick={() => setEditingProduct(null)} className="text-[#9D968D] hover:text-[#EFECE6]">
@@ -2771,29 +2954,142 @@ function AdminDashboardPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-[#9D968D] uppercase text-[10px] mb-1 font-semibold">
-                  Product Picture
-                </label>
-                <div className="flex items-center gap-3 p-3 bg-[#151311] border border-[#2C2825] rounded">
-                  <img
-                    src={editingProduct.image || "/assets/hero-comb.jpg"}
-                    alt={editingProduct.name}
-                    className="w-14 h-14 object-cover rounded border border-[#3E3832]"
-                  />
-                  <div className="flex-1 space-y-1">
-                    <label className="cursor-pointer bg-[#2C2825] hover:bg-[#3E3832] text-[#EFECE6] px-3 py-1.5 rounded text-[10px] font-semibold uppercase tracking-wider inline-flex items-center gap-1.5 transition-colors">
-                      <Upload size={12} />
-                      <span>Upload New Picture from Computer</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleImageFileChange(e, true)}
-                        className="hidden"
-                      />
-                    </label>
-                    <p className="text-[10px] text-[#9D968D]">Upload directly from your device</p>
+              {/* EDIT PRODUCT PICTURES GALLERY */}
+              <div className="border border-[#2C2825] bg-[#151311] rounded p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#24201D] pb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[#EFECE6] font-semibold text-xs uppercase tracking-wider">
+                        Product Pictures & Gallery
+                      </span>
+                      <span className="bg-[#2C2825] text-[#C59B63] px-2 py-0.5 rounded text-[10px] font-mono font-bold">
+                        {(editingProduct.images?.length || 1)} {(editingProduct.images?.length || 1) === 1 ? "Photo" : "Photos"}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-[#9D968D] mt-0.5">
+                      First image is the storefront cover. Click 'Set as Cover' to reorder. Multiple pictures show in the product gallery.
+                    </p>
                   </div>
+
+                  <label className="cursor-pointer bg-[#C59B63] hover:bg-[#d6a96f] text-[#1B1816] px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1.5 transition-colors">
+                    <Upload size={13} />
+                    <span>{imageFileUploading ? "Processing..." : "Add Pictures"}</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      disabled={imageFileUploading}
+                      onChange={(e) => handleImageFileChange(e, true)}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {/* Gallery Thumbnails Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3 pt-1">
+                  {(editingProduct.images || (editingProduct.image ? [editingProduct.image] : ["/assets/hero-comb.jpg"])).map(
+                    (imgUrl: string, idx: number) => (
+                      <div
+                        key={idx}
+                        className={`relative group rounded border overflow-hidden bg-[#1B1816] aspect-square flex flex-col items-center justify-center ${
+                          idx === 0 ? "border-[#C59B63] ring-1 ring-[#C59B63]/40" : "border-[#3E3832]"
+                        }`}
+                      >
+                        <img src={imgUrl} alt={`Product ${idx + 1}`} className="w-full h-full object-cover" />
+
+                        {/* Cover Badge */}
+                        <div className="absolute top-1 left-1">
+                          {idx === 0 ? (
+                            <span className="bg-[#C59B63] text-[#1B1816] text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
+                              ★ Cover
+                            </span>
+                          ) : (
+                            <span className="bg-black/70 text-[#B6AFA5] text-[9px] px-1 py-0.5 rounded font-mono">
+                              #{idx + 1}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Hover Overlay Actions */}
+                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-1.5">
+                          {idx !== 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const current = [...(editingProduct.images || [editingProduct.image])];
+                                const [selected] = current.splice(idx, 1);
+                                current.unshift(selected);
+                                setEditingProduct({
+                                  ...editingProduct,
+                                  images: current,
+                                  image: current[0],
+                                });
+                              }}
+                              className="bg-[#C59B63] hover:bg-[#d6a96f] text-[#1B1816] text-[9px] font-semibold px-2 py-1 rounded w-full text-center"
+                            >
+                              Set as Cover
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const current = (editingProduct.images || [editingProduct.image]).filter(
+                                (_: any, i: number) => i !== idx,
+                              );
+                              const updated = current.length > 0 ? current : ["/assets/hero-comb.jpg"];
+                              setEditingProduct({
+                                ...editingProduct,
+                                images: updated,
+                                image: updated[0],
+                              });
+                            }}
+                            className="bg-red-950/80 hover:bg-red-900 text-red-200 border border-red-800 text-[9px] px-2 py-1 rounded w-full flex items-center justify-center gap-1"
+                          >
+                            <Trash2 size={10} />
+                            <span>Remove</span>
+                          </button>
+                        </div>
+                      </div>
+                    ),
+                  )}
+
+                  {/* Add Tile */}
+                  <label className="border border-dashed border-[#3E3832] hover:border-[#C59B63] rounded aspect-square flex flex-col items-center justify-center gap-1.5 cursor-pointer text-[#9D968D] hover:text-[#C59B63] transition-colors p-2 text-center bg-[#151311]">
+                    <Plus size={18} />
+                    <span className="text-[10px] font-medium leading-tight">+ Add Photos</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      disabled={imageFileUploading}
+                      onChange={(e) => handleImageFileChange(e, true)}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {/* Direct Image URL adder */}
+                <div className="flex items-center gap-2 pt-2 border-t border-[#24201D]">
+                  <input
+                    type="url"
+                    placeholder="Or paste an image web link (https://...)..."
+                    value={editProdUrlInput}
+                    onChange={(e) => setEditProdUrlInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddEditImageUrl();
+                      }
+                    }}
+                    className="flex-1 border border-[#2C2825] bg-[#1E1B18] px-3 py-1.5 text-xs text-[#EFECE6] rounded outline-none focus:border-[#C59B63]"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddEditImageUrl}
+                    className="px-3 py-1.5 bg-[#2C2825] hover:bg-[#3E3832] text-[#EFECE6] text-[10px] font-semibold rounded uppercase tracking-wider"
+                  >
+                    Add URL
+                  </button>
                 </div>
               </div>
 

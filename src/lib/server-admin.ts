@@ -101,6 +101,7 @@ export const getAdminProductsFn = createServerFn({ method: "GET" }).handler(asyn
       categoryName: p.category?.name || "Uncategorized",
       categoryId: p.categoryId,
       image: p.images[0]?.url || "/assets/hero-comb.jpg",
+      images: p.images.length > 0 ? p.images.map((img) => img.url) : [p.images[0]?.url || "/assets/hero-comb.jpg"],
       totalSold: p.orderItems.reduce((sum, item) => sum + item.quantity, 0),
     })),
     categories: categories.map((c) => ({ id: c.id, name: c.name, slug: c.slug })),
@@ -124,7 +125,8 @@ export const createAdminProductFn = createServerFn({ method: "POST" })
       categoryId?: string;
       status: "PUBLISHED" | "DRAFT" | "ARCHIVED";
       isFeatured: boolean;
-      imageUrl: string;
+      imageUrl?: string;
+      imageUrls?: string[];
       benefits: string[];
     }) => d,
   )
@@ -135,6 +137,12 @@ export const createAdminProductFn = createServerFn({ method: "POST" })
     const compareAtPriceCents = data.compareAtRupees
       ? Math.round(data.compareAtRupees * 100)
       : null;
+
+    const rawImages = (data.imageUrls && data.imageUrls.length > 0)
+      ? data.imageUrls
+      : (data.imageUrl ? [data.imageUrl] : ["/assets/hero-comb.jpg"]);
+    const finalImages = rawImages.filter((u) => typeof u === "string" && u.trim().length > 0);
+    const validImages = finalImages.length > 0 ? finalImages : ["/assets/hero-comb.jpg"];
 
     const product = await prisma.product.create({
       data: {
@@ -151,7 +159,11 @@ export const createAdminProductFn = createServerFn({ method: "POST" })
         isFeatured: data.isFeatured,
         benefits: data.benefits,
         images: {
-          create: [{ url: data.imageUrl || "/assets/hero-comb.jpg", alt: data.name, sortOrder: 0 }],
+          create: validImages.map((url, idx) => ({
+            url: url.trim(),
+            alt: `${data.name} ${idx + 1}`,
+            sortOrder: idx,
+          })),
         },
       },
     });
@@ -186,6 +198,7 @@ export const updateAdminProductFn = createServerFn({ method: "POST" })
       status: "PUBLISHED" | "DRAFT" | "ARCHIVED";
       isFeatured: boolean;
       imageUrl?: string;
+      imageUrls?: string[];
     }) => d,
   )
   .handler(async ({ data }) => {
@@ -211,7 +224,24 @@ export const updateAdminProductFn = createServerFn({ method: "POST" })
       },
     });
 
-    if (data.imageUrl && data.imageUrl.trim()) {
+    if (data.imageUrls && Array.isArray(data.imageUrls)) {
+      const validImages = data.imageUrls
+        .map((u) => (typeof u === "string" ? u.trim() : ""))
+        .filter((u) => u.length > 0);
+      if (validImages.length > 0) {
+        await prisma.productImage.deleteMany({
+          where: { productId: data.id },
+        });
+        await prisma.productImage.createMany({
+          data: validImages.map((url, idx) => ({
+            productId: data.id,
+            url,
+            alt: `${data.name} ${idx + 1}`,
+            sortOrder: idx,
+          })),
+        });
+      }
+    } else if (data.imageUrl && data.imageUrl.trim()) {
       const existingImg = await prisma.productImage.findFirst({
         where: { productId: data.id },
         orderBy: { sortOrder: "asc" },
