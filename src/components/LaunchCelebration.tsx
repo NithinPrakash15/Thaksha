@@ -1,6 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { Sparkles, Gift, X, Copy, Check } from "lucide-react";
-import { toast } from "sonner";
+import { Sparkles, X } from "lucide-react";
 
 // Exact 24-36 hour launch window: expires October 22, 2026 at 23:59:59 IST
 export const LAUNCH_EXPIRY_TIMESTAMP = new Date("2026-10-22T23:59:59+05:30").getTime();
@@ -22,8 +21,9 @@ export function useIsLaunchDay() {
 }
 
 /**
- * High-end golden sparkle confetti canvas animation
- * Runs for 5 seconds on first visit, then cleanly detaches.
+ * Luxury Champagne-Gold Starlight Shower
+ * Runs gently for 5 seconds on first visit, then cleanly detaches.
+ * Pure luxury aesthetic (no discount, pure prestige celebration).
  */
 export function LaunchConfetti() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -32,10 +32,10 @@ export function LaunchConfetti() {
   useEffect(() => {
     if (Date.now() >= LAUNCH_EXPIRY_TIMESTAMP) return;
 
-    const alreadySeen = sessionStorage.getItem("thaksha_launch_celebration_seen");
+    const alreadySeen = sessionStorage.getItem("thaksha_launch_decor_seen");
     if (alreadySeen) return;
 
-    sessionStorage.setItem("thaksha_launch_celebration_seen", "true");
+    sessionStorage.setItem("thaksha_launch_decor_seen", "true");
     setActive(true);
 
     const timer = setTimeout(() => {
@@ -63,18 +63,18 @@ export function LaunchConfetti() {
     window.addEventListener("resize", onResize);
 
     const colors = ["#C59B63", "#E5C38E", "#F4E3B5", "#8E6934", "#FFF8EE", "#D4AF37"];
-    const particleCount = 75;
+    const particleCount = 80;
 
     const particles = Array.from({ length: particleCount }).map(() => ({
       x: Math.random() * width,
-      y: Math.random() * -height * 0.5,
-      size: Math.random() * 6 + 3,
-      speedY: Math.random() * 2.5 + 1.2,
-      speedX: (Math.random() - 0.5) * 1.5,
+      y: Math.random() * -height * 0.6,
+      size: Math.random() * 5 + 2.5,
+      speedY: Math.random() * 2.2 + 0.8,
+      speedX: (Math.random() - 0.5) * 1.2,
       rotation: Math.random() * 360,
-      rotationSpeed: (Math.random() - 0.5) * 4,
+      rotationSpeed: (Math.random() - 0.5) * 3,
       color: colors[Math.floor(Math.random() * colors.length)],
-      opacity: Math.random() * 0.5 + 0.5,
+      opacity: Math.random() * 0.6 + 0.4,
       shape: Math.random() > 0.4 ? "rect" : "star",
     }));
 
@@ -94,9 +94,8 @@ export function LaunchConfetti() {
         ctx.globalAlpha = p.opacity;
 
         if (p.shape === "rect") {
-          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.65);
         } else {
-          // Subtle star/shimmer
           ctx.beginPath();
           ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
           ctx.fill();
@@ -133,106 +132,52 @@ export function LaunchConfetti() {
 }
 
 /**
- * Grand Launch Celebration Top Announcement Bar
- * Displays live countdown timer + 1-click copy coupon code "LAUNCH15"
+ * Grand Inaugural Ribbon (Top Bar)
+ * High-end luxury ceremonial banner celebrating Day 1 inauguration.
+ * Zero discount / offer language. Pure prestige brand presence.
  */
 export function LaunchTopBar() {
   const isLaunch = useIsLaunchDay();
-  const [copied, setCopied] = useState(false);
-  const [timeLeft, setTimeLeft] = useState<{ hours: number; minutes: number; seconds: number }>({
-    hours: 24,
-    minutes: 0,
-    seconds: 0,
-  });
-
-  useEffect(() => {
-    if (!isLaunch) return;
-
-    const updateTimer = () => {
-      const diff = Math.max(0, LAUNCH_EXPIRY_TIMESTAMP - Date.now());
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-      setTimeLeft({ hours, minutes, seconds });
-    };
-
-    updateTimer();
-    const interval = setInterval(updateTimer, 1000);
-    return () => clearInterval(interval);
-  }, [isLaunch]);
 
   if (!isLaunch) return null;
 
-  const handleCopyCode = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigator.clipboard.writeText("LAUNCH15");
-    setCopied(true);
-    toast.success("Coupon code LAUNCH15 copied! Enjoy 15% off at checkout.", {
-      icon: "🎉",
-    });
-    setTimeout(() => setCopied(false), 3000);
-  };
-
-  const pad = (n: number) => String(n).padStart(2, "0");
-
   return (
-    <div className="relative overflow-hidden bg-gradient-to-r from-[#171412] via-[#2A231C] to-[#171412] text-[#F3EFEA] border-b border-[#C59B63]/40 py-2.5 px-4 z-40 text-xs shadow-md">
+    <div className="relative overflow-hidden bg-gradient-to-r from-[#141210] via-[#241F1A] to-[#141210] text-[#EFECE6] border-b border-[#C59B63]/40 py-2.5 px-4 z-40 text-xs shadow-md">
       {/* Subtle gold ambient glow */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(197,155,99,0.18)_0,transparent_75%)] pointer-events-none" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(197,155,99,0.15)_0,transparent_75%)] pointer-events-none" />
 
-      <div className="relative mx-auto max-w-7xl flex flex-col md:flex-row items-center justify-between gap-2.5 text-center md:text-left">
-        {/* Left: Headline & Celebration Tag */}
-        <div className="flex items-center gap-2">
+      <div className="relative mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-center gap-2 md:gap-4 text-center">
+        <div className="flex items-center gap-2.5">
           <span className="flex h-2 w-2 relative">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#C59B63] opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-[#C59B63]"></span>
           </span>
-          <span className="inline-flex items-center gap-1.5 font-serif tracking-wider text-[11px] md:text-xs text-[#E5C38E] uppercase font-semibold">
-            <Sparkles size={13} className="text-[#C59B63] animate-pulse" />
-            <span>Grand Launch Day Exclusive</span>
-          </span>
-          <span className="hidden lg:inline text-[#9D968D]">•</span>
-          <span className="hidden lg:inline text-[11px] text-[#D8D2C7]">
-            Celebrate our official opening with 15% off all handcrafted neem rituals.
+          <span className="font-serif tracking-[0.28em] text-[10px] md:text-[11px] text-[#E5C38E] uppercase font-semibold inline-flex items-center gap-1.5">
+            <Sparkles size={12} className="text-[#C59B63] animate-pulse" />
+            <span>Official Inauguration</span>
           </span>
         </div>
 
-        {/* Center / Right: Coupon + Countdown Timer */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleCopyCode}
-            className="group inline-flex items-center gap-1.5 bg-[#C59B63] hover:bg-[#d4a86f] text-[#1B1816] px-2.5 py-1 rounded text-[10px] font-bold tracking-wider uppercase transition-all transform hover:scale-105 active:scale-95 shadow-sm"
-            title="Click to copy coupon code"
-          >
-            <Gift size={12} />
-            <span>Use Code:</span>
-            <span className="underline decoration-black/30 font-mono font-extrabold">LAUNCH15</span>
-            {copied ? <Check size={12} className="text-green-900" /> : <Copy size={11} className="opacity-70 group-hover:opacity-100" />}
-          </button>
+        <span className="hidden sm:inline text-[#C59B63]/60">•</span>
 
-          {/* Countdown Clock */}
-          <div className="flex items-center gap-1 font-mono text-[11px] text-[#E5C38E] bg-black/40 px-2 py-0.5 rounded border border-[#C59B63]/30">
-            <span className="text-[9px] uppercase tracking-wider text-[#9D968D] font-sans mr-1">Ends in:</span>
-            <span className="font-bold">{pad(timeLeft.hours)}h</span>:
-            <span className="font-bold">{pad(timeLeft.minutes)}m</span>:
-            <span className="font-bold text-[#F4E3B5]">{pad(timeLeft.seconds)}s</span>
-          </div>
-        </div>
+        <p className="font-serif tracking-[0.2em] text-[10px] md:text-[11px] text-[#D8D2C7] uppercase font-light">
+          Celebrating the debut of Thaksha • Handcrafted Neem Rituals Now Live
+        </p>
       </div>
     </div>
   );
 }
 
 /**
- * Floating Launch Day Welcome Pill (Bottom Right)
- * Dismissable by the customer.
+ * Luxury Floating Inaugural Seal (Bottom Corner)
+ * Prestigious brand debut emblem, dismissable with X.
  */
 export function LaunchFloatingBadge() {
   const isLaunch = useIsLaunchDay();
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    if (sessionStorage.getItem("thaksha_launch_badge_dismissed")) {
+    if (sessionStorage.getItem("thaksha_inaugural_badge_dismissed")) {
       setDismissed(true);
     }
   }, []);
@@ -241,30 +186,35 @@ export function LaunchFloatingBadge() {
 
   const handleDismiss = () => {
     setDismissed(true);
-    sessionStorage.setItem("thaksha_launch_badge_dismissed", "true");
+    sessionStorage.setItem("thaksha_inaugural_badge_dismissed", "true");
   };
 
   return (
     <aside
-      aria-label="Grand Launch announcement"
-      className="fixed bottom-4 right-4 z-40 max-w-sm rounded-lg border border-[#C59B63]/60 bg-[#171412]/95 backdrop-blur-md p-3.5 text-[#F3EFEA] shadow-2xl animate-fade-in"
+      aria-label="Official Inauguration Badge"
+      className="fixed bottom-5 right-5 z-40 max-w-sm rounded-lg border border-[#C59B63]/50 bg-[#141210]/95 backdrop-blur-md p-4 text-[#EFECE6] shadow-2xl animate-fade-in"
     >
       <div className="flex items-start gap-3">
-        <div className="w-8 h-8 rounded-full bg-[#C59B63]/20 border border-[#C59B63]/50 flex items-center justify-center flex-shrink-0 text-[#C59B63]">
-          <Sparkles size={16} />
+        <div className="w-9 h-9 rounded-full bg-[#C59B63]/15 border border-[#C59B63]/40 flex items-center justify-center flex-shrink-0 text-[#C59B63]">
+          <Sparkles size={17} />
         </div>
         <div className="flex-1 pr-1 text-xs">
-          <p className="font-serif font-bold text-[#E5C38E] tracking-wide">
-            We Are Officially Live! 🎉
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] uppercase tracking-[0.25em] text-[#C59B63] font-semibold">
+              Inaugural Day
+            </span>
+          </div>
+          <p className="font-serif text-sm font-semibold text-[#EFECE6] mt-0.5 tracking-wide">
+            Welcome to Thaksha
           </p>
-          <p className="text-[11px] text-[#B8B1A5] mt-0.5 leading-relaxed">
-            Welcome to Thaksha. Orders placed on launch day receive complimentary express delivery and sacred care packaging.
+          <p className="text-[11px] text-[#A69F94] mt-1 leading-relaxed">
+            Every comb and brush is hand-carved from seasoned mature neem wood and cured with organic botanical oils.
           </p>
         </div>
         <button
           onClick={handleDismiss}
-          className="text-[#9D968D] hover:text-[#F3EFEA] p-0.5 transition-colors"
-          aria-label="Dismiss launch notification"
+          className="text-[#9D968D] hover:text-[#EFECE6] p-0.5 transition-colors"
+          aria-label="Dismiss inaugural notification"
         >
           <X size={14} />
         </button>

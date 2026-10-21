@@ -151,9 +151,9 @@ function Hero({ products }: { products: DbProductSummary[] }) {
     >
       <div className="order-2 lg:order-1 lg:col-span-5">
         {isLaunchDay && (
-          <div className="mb-4 inline-flex items-center gap-2 bg-[#C59B63]/15 border border-[#C59B63]/50 px-3.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.25em] text-[#8E6934] shadow-sm animate-pulse">
-            <Sparkles size={13} className="text-[#C59B63]" />
-            <span>Grand Launch Day • 15% Off with code LAUNCH15</span>
+          <div className="mb-4 inline-flex items-center gap-2 bg-[#C59B63]/15 border border-[#C59B63]/40 px-3.5 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.28em] text-brand-oak shadow-sm">
+            <Sparkles size={12} className="text-[#C59B63] animate-pulse" />
+            <span>Official Inauguration • The Maiden Collection</span>
           </div>
         )}
         <span className="mb-4 block text-[11px] font-semibold uppercase tracking-[0.3em] text-brand-sage">
