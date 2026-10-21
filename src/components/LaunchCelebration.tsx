@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { Sparkles, X } from "lucide-react";
+import { toast } from "sonner";
 
 // Exact 24-36 hour launch window: expires October 22, 2026 at 23:59:59 IST
 export const LAUNCH_EXPIRY_TIMESTAMP = new Date("2026-10-22T23:59:59+05:30").getTime();
@@ -21,9 +22,9 @@ export function useIsLaunchDay() {
 }
 
 /**
- * Luxury Champagne-Gold Starlight Shower
+ * Creative: Luxury Golden Neem Leaves & Starlight Shower
  * Runs gently for 5 seconds on first visit, then cleanly detaches.
- * Pure luxury aesthetic (no discount, pure prestige celebration).
+ * Custom SVG/Canvas golden neem leaves fluttering gently in 3D rotation.
  */
 export function LaunchConfetti() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -63,19 +64,19 @@ export function LaunchConfetti() {
     window.addEventListener("resize", onResize);
 
     const colors = ["#C59B63", "#E5C38E", "#F4E3B5", "#8E6934", "#FFF8EE", "#D4AF37"];
-    const particleCount = 85;
+    const particleCount = 75;
 
     const particles = Array.from({ length: particleCount }).map(() => ({
       x: Math.random() * width,
       y: Math.random() * -height * 0.6,
-      size: Math.random() * 5 + 2.5,
-      speedY: Math.random() * 2.2 + 0.8,
-      speedX: (Math.random() - 0.5) * 1.2,
+      size: Math.random() * 6 + 3.5,
+      speedY: Math.random() * 2.0 + 0.9,
+      speedX: (Math.random() - 0.5) * 1.4,
       rotation: Math.random() * 360,
-      rotationSpeed: (Math.random() - 0.5) * 3,
+      rotationSpeed: (Math.random() - 0.5) * 2.5,
       color: colors[Math.floor(Math.random() * colors.length)],
       opacity: Math.random() * 0.6 + 0.4,
-      shape: Math.random() > 0.4 ? "rect" : "star",
+      shape: Math.random() > 0.5 ? "leaf" : Math.random() > 0.4 ? "star" : "dust",
     }));
 
     let animId: number;
@@ -93,11 +94,35 @@ export function LaunchConfetti() {
         ctx.fillStyle = p.color;
         ctx.globalAlpha = p.opacity;
 
-        if (p.shape === "rect") {
-          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.65);
-        } else {
+        if (p.shape === "leaf") {
+          // Curved sacred neem leaf
           ctx.beginPath();
-          ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+          ctx.moveTo(0, -p.size * 1.4);
+          ctx.quadraticCurveTo(p.size * 0.65, 0, 0, p.size * 1.4);
+          ctx.quadraticCurveTo(-p.size * 0.65, 0, 0, -p.size * 1.4);
+          ctx.fill();
+
+          // Central leaf vein
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+          ctx.lineWidth = 0.5;
+          ctx.beginPath();
+          ctx.moveTo(0, -p.size * 1.1);
+          ctx.lineTo(0, p.size * 1.1);
+          ctx.stroke();
+        } else if (p.shape === "star") {
+          // 4-pointed shimmering starlight
+          ctx.beginPath();
+          const s = p.size;
+          ctx.moveTo(0, -s);
+          ctx.quadraticCurveTo(0, 0, s, 0);
+          ctx.quadraticCurveTo(0, 0, 0, s);
+          ctx.quadraticCurveTo(0, 0, -s, 0);
+          ctx.quadraticCurveTo(0, 0, 0, -s);
+          ctx.fill();
+        } else {
+          // Soft golden dust
+          ctx.beginPath();
+          ctx.arc(0, 0, p.size * 0.4, 0, Math.PI * 2);
           ctx.fill();
         }
 
@@ -132,8 +157,8 @@ export function LaunchConfetti() {
 }
 
 /**
- * Interactive Golden Click Sparkles (Micro-interaction)
- * Delicate luxury starburst on cursor click.
+ * Creative: Interactive Golden Click Sparkles (Micro-interaction)
+ * Delicate luxury starburst on cursor click anywhere on the page.
  */
 export function LaunchClickSparkles() {
   const isLaunch = useIsLaunchDay();
@@ -204,10 +229,112 @@ export function LaunchClickSparkles() {
   return null;
 }
 
+function playCelebrationChime() {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+    const freqs = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6 harmonious chord
+    freqs.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+      gain.gain.setValueAtTime(0, now + idx * 0.08);
+      gain.gain.linearRampToValueAtTime(0.06, now + idx * 0.08 + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.08 + 1.2);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + idx * 0.08);
+      osc.stop(now + idx * 0.08 + 1.3);
+    });
+  } catch {
+    // Non-blocking fallback if browser policy blocks audio
+  }
+}
+
+/**
+ * Creative: Ceremonial Ribbon-Cutting Unveiling
+ * Visitors can interactively "Cut the Inaugural Ribbon" to celebrate opening day!
+ */
+export function LaunchCeremonialRibbon() {
+  const isLaunch = useIsLaunchDay();
+  const [isCut, setIsCut] = useState(false);
+
+  useEffect(() => {
+    if (sessionStorage.getItem("thaksha_ribbon_cut_done")) {
+      setIsCut(true);
+    }
+  }, []);
+
+  if (!isLaunch) return null;
+
+  const handleCutRibbon = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (isCut) return;
+    setIsCut(true);
+    sessionStorage.setItem("thaksha_ribbon_cut_done", "true");
+    playCelebrationChime();
+
+    toast.success("The Inaugural Ribbon has been cut! Welcome to Thaksha.", {
+      icon: "✂️",
+    });
+
+    // Trigger instant sparkle burst at button position and surroundings
+    const rect = e.currentTarget.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+
+    [-40, 0, 40].forEach((dx, i) => {
+      setTimeout(() => {
+        const ev = new MouseEvent("click", { clientX: cx + dx, clientY: cy });
+        window.dispatchEvent(ev);
+      }, i * 120);
+    });
+  };
+
+  return (
+    <div className="relative overflow-hidden w-full bg-[#141210] border-y border-[#C59B63]/40 py-2.5 px-4 shadow-inner">
+      <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+        {/* Left Satin Ribbon */}
+        <div
+          className={`flex-1 h-0.5 bg-gradient-to-r from-transparent via-[#C59B63] to-[#E5C38E] transition-all duration-1000 ${
+            isCut ? "opacity-30 -translate-x-12" : "opacity-100"
+          }`}
+        />
+
+        {/* Center Ceremonial Cut Action / Status */}
+        {!isCut ? (
+          <button
+            onClick={handleCutRibbon}
+            className="group inline-flex items-center gap-2 bg-gradient-to-r from-[#94713E] via-[#C59B63] to-[#94713E] text-[#141210] px-4 py-1.5 rounded-full font-serif font-bold text-[10px] md:text-xs uppercase tracking-[0.25em] shadow-lg transform hover:scale-105 active:scale-95 transition-all"
+            title="Click to cut the ceremonial inaugural ribbon"
+          >
+            <span className="text-sm transform group-hover:rotate-45 transition-transform">✂️</span>
+            <span>Tap to Cut Inaugural Ribbon</span>
+          </button>
+        ) : (
+          <div className="inline-flex items-center gap-2 text-[#E5C38E] font-serif text-[10px] md:text-xs uppercase tracking-[0.28em] font-medium animate-fade-in">
+            <Sparkles size={12} className="text-[#C59B63] animate-pulse" />
+            <span>The Ribbon Has Been Cut • Officially Open Worldwide</span>
+            <Sparkles size={12} className="text-[#C59B63] animate-pulse" />
+          </div>
+        )}
+
+        {/* Right Satin Ribbon */}
+        <div
+          className={`flex-1 h-0.5 bg-gradient-to-r from-[#E5C38E] via-[#C59B63] to-transparent transition-all duration-1000 ${
+            isCut ? "opacity-30 translate-x-12" : "opacity-100"
+          }`}
+        />
+      </div>
+    </div>
+  );
+}
+
 /**
  * Grand Inaugural Ribbon (Top Bar)
  * High-end luxury ceremonial banner celebrating Day 1 inauguration.
- * Zero discount / offer language. Pure prestige brand presence.
  */
 export function LaunchTopBar() {
   const isLaunch = useIsLaunchDay();
@@ -215,7 +342,7 @@ export function LaunchTopBar() {
   if (!isLaunch) return null;
 
   return (
-    <div className="relative overflow-hidden bg-gradient-to-r from-[#141210] via-[#241F1A] to-[#141210] text-[#EFECE6] border-b border-[#C59B63]/40 py-2.5 px-4 z-40 text-xs shadow-md">
+    <div className="relative overflow-hidden bg-gradient-to-r from-[#141210] via-[#241F1A] to-[#141210] text-[#EFECE6] border-b border-[#C59B63]/40 py-2 px-4 z-40 text-xs shadow-md">
       {/* Subtle gold ambient glow */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(197,155,99,0.15)_0,transparent_75%)] pointer-events-none" />
 

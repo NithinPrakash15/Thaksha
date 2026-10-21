@@ -5,6 +5,7 @@ import { PrimaryButton, Shell } from "@/components/Shell";
 import { formatRupees, getProductBySlugFn, getCatalogProductsFn, submitProductReviewFn, type DbProductDetail } from "@/lib/server-products";
 import { addToCart, toggleWishlist, getWishlist } from "@/lib/store";
 import { toast } from "sonner";
+import { useIsLaunchDay } from "@/components/LaunchCelebration";
 
 export const Route = createFileRoute("/product/$slug")({
   loader: async ({ params }) => {
@@ -30,6 +31,7 @@ export const Route = createFileRoute("/product/$slug")({
 
 function ProductPage() {
   const { product, related } = Route.useLoaderData();
+  const isLaunchDay = useIsLaunchDay();
   const [activeImage, setActiveImage] = useState(product.gallery[0] || product.image);
   const [quantity, setQuantity] = useState(1);
   const [inWishlist, setInWishlist] = useState(false);
@@ -142,6 +144,13 @@ function ProductPage() {
                   </span>
                 )}
               </div>
+
+              {isLaunchDay && (
+                <div className="absolute top-4 right-4 bg-gradient-to-r from-[#94713E] via-[#C59B63] to-[#94713E] text-[#141210] px-3 py-1 text-[9px] uppercase tracking-[0.22em] font-serif font-bold shadow-md flex items-center gap-1.5">
+                  <Sparkles size={11} className="text-[#141210]" />
+                  <span>Maiden Batch</span>
+                </div>
+              )}
             </div>
 
             {/* Thumbnail selector */}
@@ -179,6 +188,13 @@ function ProductPage() {
             <p className="text-[11px] uppercase tracking-[0.28em] text-brand-sage font-medium">
               {product.category} • SKU: {product.sku}
             </p>
+
+            {isLaunchDay && (
+              <div className="mt-3 inline-flex items-center gap-2 bg-[#C59B63]/15 border border-[#C59B63]/40 px-3 py-1 rounded-full text-[10px] uppercase font-serif tracking-[0.25em] text-[#8E6934] font-semibold">
+                <Sparkles size={11} className="text-[#C59B63] animate-pulse" />
+                <span>Inaugural Batch • Handcrafted 2026</span>
+              </div>
+            )}
 
             <h1 className="mt-4 font-serif text-5xl md:text-6xl text-brand-primary leading-tight">
               {product.name}

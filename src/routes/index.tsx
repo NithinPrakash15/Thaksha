@@ -14,6 +14,7 @@ import {
   useIsLaunchDay,
   LaunchInauguralSash,
   LaunchAmbientDust,
+  LaunchCeremonialRibbon,
 } from "@/components/LaunchCelebration";
 
 export const Route = createFileRoute("/")({
@@ -67,6 +68,8 @@ function Index() {
     <Shell>
       <div className="min-h-screen bg-brand-cream text-brand-ink font-sans">
         <main>
+          {/* Interactive Ceremonial Ribbon-Cutting Unveiling */}
+          <LaunchCeremonialRibbon />
           <Hero products={products} />
           <Marquee />
           <TrustIndicators />

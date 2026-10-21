@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Search, ShoppingBag, UserRound, Shield, LogOut, Bell, Check, Package } from "lucide-react";
+import { Search, ShoppingBag, UserRound, Shield, LogOut, Bell, Check, Package, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Toaster, toast } from "sonner";
 import { getCart, hydrateCustomerCart } from "@/lib/store";
@@ -139,10 +139,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
       ) : null}
 
       <nav className="sticky top-0 z-50 flex items-center justify-between border-b border-brand-primary/5 bg-brand-cream/90 px-5 py-4 backdrop-blur-md md:px-10">
-        <Link to="/" className="flex items-center gap-3 text-brand-primary">
-          <img src="/thaksha-logo.png" alt="Thaksha" className="h-10 w-10 object-contain" />
-          <span className="font-serif text-2xl font-semibold uppercase tracking-wider">Thaksha</span>
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link to="/" className="flex items-center gap-3 text-brand-primary">
+            <img src="/thaksha-logo.png" alt="Thaksha" className="h-10 w-10 object-contain" />
+            <span className="font-serif text-2xl font-semibold uppercase tracking-wider">Thaksha</span>
+          </Link>
+          {isLaunchDay && (
+            <span className="hidden sm:inline-flex items-center gap-1.5 bg-[#C59B63]/15 border border-[#C59B63]/40 text-[#8E6934] text-[9px] font-serif uppercase tracking-[0.22em] px-2.5 py-1 rounded-full font-bold shadow-sm">
+              <Sparkles size={11} className="text-[#C59B63] animate-pulse" />
+              <span>Est. 2026 • Inaugural Edition</span>
+            </span>
+          )}
+        </div>
 
         <div className="hidden gap-8 text-[11px] font-medium uppercase tracking-[0.22em] text-brand-primary md:flex">
           <Link to="/shop" className="hover:text-brand-oak transition-colors">
