@@ -10,6 +10,7 @@ import { getCatalogProductsFn, formatRupees, type DbProductSummary } from "@/lib
 import { addToCart } from "@/lib/store";
 import { toast } from "sonner";
 import { ShieldCheck, Sparkles, Truck, Award } from "lucide-react";
+import { useIsLaunchDay } from "@/components/LaunchCelebration";
 
 export const Route = createFileRoute("/")({
   loader: async () => {
@@ -94,6 +95,7 @@ function Hero({ products }: { products: DbProductSummary[] }) {
   ];
 
   const [idx, setIdx] = useState(0);
+  const isLaunchDay = useIsLaunchDay();
 
   useEffect(() => {
     if (slides.length <= 1) return;
@@ -148,7 +150,13 @@ function Hero({ products }: { products: DbProductSummary[] }) {
       className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-6 pb-20 pt-12 md:px-10 lg:grid-cols-12"
     >
       <div className="order-2 lg:order-1 lg:col-span-5">
-        <span className="mb-4 inline-block text-[11px] font-semibold uppercase tracking-[0.3em] text-brand-sage">
+        {isLaunchDay && (
+          <div className="mb-4 inline-flex items-center gap-2 bg-[#C59B63]/15 border border-[#C59B63]/50 px-3.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.25em] text-[#8E6934] shadow-sm animate-pulse">
+            <Sparkles size={13} className="text-[#C59B63]" />
+            <span>Grand Launch Day • 15% Off with code LAUNCH15</span>
+          </div>
+        )}
+        <span className="mb-4 block text-[11px] font-semibold uppercase tracking-[0.3em] text-brand-sage">
           100% Seasoned Neem Wood
         </span>
         <h1 className="mb-6 font-serif text-5xl leading-[0.95] tracking-tight text-brand-primary md:text-7xl lg:text-[5.5rem]">

@@ -5,8 +5,15 @@ import { Toaster, toast } from "sonner";
 import { getCart, hydrateCustomerCart } from "@/lib/store";
 import { getViewerFn, logoutUserFn, type SafeUser } from "@/lib/server-auth";
 import { getUserNotificationsFn, markNotificationReadFn, type NotificationItem } from "@/lib/notifications";
+import {
+  LaunchTopBar,
+  LaunchConfetti,
+  LaunchFloatingBadge,
+  useIsLaunchDay,
+} from "./LaunchCelebration";
 
 export function Shell({ children }: { children: React.ReactNode }) {
+  const isLaunchDay = useIsLaunchDay();
   const [count, setCount] = useState(0);
   const [showIntro, setShowIntro] = useState(false);
   const [user, setUser] = useState<SafeUser | null>(null);
@@ -94,10 +101,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-brand-cream text-brand-ink font-sans flex flex-col">
       <Toaster richColors position="top-right" />
 
-      {/* Top Announcement Bar */}
-      <div className="bg-brand-primary text-brand-cream px-4 py-2 text-center text-[10px] uppercase tracking-[0.25em] font-medium flex items-center justify-center gap-4">
-        <span>Complimentary express shipping across India on orders above ₹4,999</span>
-      </div>
+      {/* Luxury Golden Confetti Burst (First visit on Launch Day only) */}
+      <LaunchConfetti />
+
+      {/* Top Announcement Bar (Grand Launch celebration or standard) */}
+      {isLaunchDay ? (
+        <LaunchTopBar />
+      ) : (
+        <div className="bg-brand-primary text-brand-cream px-4 py-2 text-center text-[10px] uppercase tracking-[0.25em] font-medium flex items-center justify-center gap-4">
+          <span>Complimentary express shipping across India on orders above ₹4,999</span>
+        </div>
+      )}
 
       {showIntro ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-cream">
@@ -278,6 +292,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </footer>
+
+      {/* Floating Launch Day Welcome Pill */}
+      <LaunchFloatingBadge />
     </div>
   );
 }
