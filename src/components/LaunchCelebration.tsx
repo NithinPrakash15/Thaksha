@@ -255,78 +255,224 @@ function playCelebrationChime() {
 }
 
 /**
- * Creative: Ceremonial Ribbon-Cutting Unveiling
- * Visitors can interactively "Cut the Inaugural Ribbon" to celebrate opening day!
+ * Creative: Grand Ceremonial Ribbon-Cutting Unveiling
+ * The entire website is softly blurred in the background.
+ * A majestic ceremonial silk ribbon spans edge-to-edge across the centre.
+ * The visitor taps the central golden medallion with golden scissors to cut the ribbon.
+ * The ribbon parts outwards to the left & right, starlight bursts forth,
+ * and the blur dissolves smoothly, unveiling the site!
  */
 export function LaunchCeremonialRibbon() {
   const isLaunch = useIsLaunchDay();
   const [isCut, setIsCut] = useState(false);
+  const [isUnveiled, setIsUnveiled] = useState(false);
+  const [isCutting, setIsCutting] = useState(false);
 
   useEffect(() => {
     if (sessionStorage.getItem("thaksha_ribbon_cut_done")) {
       setIsCut(true);
+      setIsUnveiled(true);
     }
+
+    const handleReopen = () => {
+      setIsCut(false);
+      setIsUnveiled(false);
+      setIsCutting(false);
+      sessionStorage.removeItem("thaksha_ribbon_cut_done");
+    };
+
+    window.addEventListener("thaksha:reopen_ribbon", handleReopen);
+    return () => window.removeEventListener("thaksha:reopen_ribbon", handleReopen);
   }, []);
 
-  if (!isLaunch) return null;
+  if (!isLaunch || isUnveiled) return null;
 
-  const handleCutRibbon = (e: React.MouseEvent<HTMLButtonElement>) => {
-    if (isCut) return;
-    setIsCut(true);
-    sessionStorage.setItem("thaksha_ribbon_cut_done", "true");
+  const handleCutRibbon = () => {
+    if (isCutting || isCut) return;
+    setIsCutting(true);
     playCelebrationChime();
 
-    toast.success("The Inaugural Ribbon has been cut! Welcome to Thaksha.", {
+    // Trigger instant sparkle bursts from center in multiple waves
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+    [-60, -30, 0, 30, 60].forEach((dx, i) => {
+      setTimeout(() => {
+        const ev = new MouseEvent("click", {
+          clientX: cx + dx,
+          clientY: cy + (i % 2 === 0 ? -20 : 20),
+        });
+        window.dispatchEvent(ev);
+      }, i * 80);
+    });
+
+    toast.success("⚜️ The Inaugural Ribbon has been cut! Welcome to Thaksha.", {
       icon: "✂️",
     });
 
-    // Trigger instant sparkle burst at button position and surroundings
-    const rect = e.currentTarget.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
+    // Animate ribbon cut, then dissolve background blur & unveil store
+    setTimeout(() => {
+      setIsCut(true);
+    }, 250);
 
-    [-40, 0, 40].forEach((dx, i) => {
-      setTimeout(() => {
-        const ev = new MouseEvent("click", { clientX: cx + dx, clientY: cy });
-        window.dispatchEvent(ev);
-      }, i * 120);
-    });
+    setTimeout(() => {
+      setIsUnveiled(true);
+      sessionStorage.setItem("thaksha_ribbon_cut_done", "true");
+    }, 1150);
+  };
+
+  const handleSkip = () => {
+    setIsCut(true);
+    setIsUnveiled(true);
+    sessionStorage.setItem("thaksha_ribbon_cut_done", "true");
   };
 
   return (
-    <div className="relative overflow-hidden w-full bg-[#141210] border-y border-[#C59B63]/40 py-2.5 px-4 shadow-inner">
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-        {/* Left Satin Ribbon */}
-        <div
-          className={`flex-1 h-0.5 bg-gradient-to-r from-transparent via-[#C59B63] to-[#E5C38E] transition-all duration-1000 ${
-            isCut ? "opacity-30 -translate-x-12" : "opacity-100"
-          }`}
-        />
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Inaugural Ribbon Unveiling Ceremony"
+      className={`fixed inset-0 z-[120] flex flex-col items-center justify-between py-10 px-4 transition-all duration-1000 select-none overflow-hidden ${
+        isCutting
+          ? "opacity-0 backdrop-blur-none pointer-events-none"
+          : "opacity-100 backdrop-blur-xl md:backdrop-blur-2xl"
+      }`}
+      style={{
+        background: isCutting
+          ? "transparent"
+          : "radial-gradient(circle at center, rgba(30, 24, 18, 0.88) 0%, rgba(12, 10, 8, 0.96) 100%)",
+      }}
+    >
+      {/* Top Heritage Emblem (Above the Ribbon) */}
+      <div
+        className={`flex flex-col items-center text-center transition-all duration-700 ${
+          isCutting ? "-translate-y-12 opacity-0" : "translate-y-0 opacity-100"
+        }`}
+      >
+        <div className="relative">
+          <div className="absolute -inset-4 rounded-full bg-[#C59B63]/20 blur-xl animate-pulse" />
+          <img
+            src="/thaksha-logo.png"
+            alt="Thaksha Logo"
+            className="relative h-16 w-16 md:h-20 md:w-20 object-contain drop-shadow-[0_0_20px_rgba(197,155,99,0.5)]"
+          />
+        </div>
+        <h1 className="font-serif text-3xl md:text-5xl text-[#EFECE6] uppercase tracking-[0.35em] font-semibold mt-3">
+          Thaksha
+        </h1>
+        <p className="text-[#C59B63] text-[10px] md:text-xs uppercase tracking-[0.35em] font-medium mt-1">
+          Artisanal Handcrafted Neem Wood Rituals
+        </p>
+        <div className="mt-2 inline-flex items-center gap-2 bg-[#C59B63]/15 border border-[#C59B63]/40 px-3 py-1 rounded-full text-[9px] uppercase tracking-[0.25em] text-[#E5C38E]">
+          <Sparkles size={10} className="text-[#C59B63] animate-pulse" />
+          <span>Official Inauguration • October 2026</span>
+          <Sparkles size={10} className="text-[#C59B63] animate-pulse" />
+        </div>
+      </div>
 
-        {/* Center Ceremonial Cut Action / Status */}
-        {!isCut ? (
+      {/* The Great Big Ribbon Spanning Across the Centre */}
+      <div className="relative w-full my-auto flex items-center justify-center">
+        {/* Horizontal Ribbon Container */}
+        <div className="relative w-full h-24 sm:h-28 md:h-36 flex items-center shadow-[0_15px_40px_rgba(0,0,0,0.8)] overflow-hidden">
+          {/* Left Ribbon Half */}
+          <div
+            className={`w-1/2 h-full flex items-center justify-end pr-10 md:pr-16 bg-gradient-to-r from-[#631212] via-[#8C1B1B] to-[#A32222] border-y-4 border-[#E5C38E] shadow-2xl relative transition-all duration-1000 ease-out ${
+              isCut
+                ? "-translate-x-[125%] -rotate-6 opacity-0"
+                : "translate-x-0 opacity-100"
+            }`}
+          >
+            {/* Inner Embroidered Gold Stitch Lines */}
+            <div className="absolute inset-x-0 top-1.5 border-t border-dashed border-[#F4E3B5]/50" />
+            <div className="absolute inset-x-0 bottom-1.5 border-b border-dashed border-[#F4E3B5]/50" />
+            <div className="hidden lg:flex items-center gap-3 text-[#F4E3B5]/90 font-serif text-xs uppercase tracking-[0.3em] font-semibold">
+              <span>⚜️ Pure Mature Neem Wood</span>
+              <span>•</span>
+              <span>Handcrafted in Kerala ⚜️</span>
+            </div>
+            {/* Satin sheen reflection */}
+            <div className="absolute inset-0 bg-gradient-to-b from-white/15 via-transparent to-black/30 pointer-events-none" />
+          </div>
+
+          {/* Right Ribbon Half */}
+          <div
+            className={`w-1/2 h-full flex items-center justify-start pl-10 md:pl-16 bg-gradient-to-r from-[#A32222] via-[#8C1B1B] to-[#631212] border-y-4 border-[#E5C38E] shadow-2xl relative transition-all duration-1000 ease-out ${
+              isCut
+                ? "translate-x-[125%] rotate-6 opacity-0"
+                : "translate-x-0 opacity-100"
+            }`}
+          >
+            {/* Inner Embroidered Gold Stitch Lines */}
+            <div className="absolute inset-x-0 top-1.5 border-t border-dashed border-[#F4E3B5]/50" />
+            <div className="absolute inset-x-0 bottom-1.5 border-b border-dashed border-[#F4E3B5]/50" />
+            <div className="hidden lg:flex items-center gap-3 text-[#F4E3B5]/90 font-serif text-xs uppercase tracking-[0.3em] font-semibold">
+              <span>⚜️ Zero Static Glide</span>
+              <span>•</span>
+              <span>Lifetime Form Guarantee ⚜️</span>
+            </div>
+            {/* Satin sheen reflection */}
+            <div className="absolute inset-0 bg-gradient-to-b from-white/15 via-transparent to-black/30 pointer-events-none" />
+          </div>
+        </div>
+
+        {/* Centre Ceremonial Rosette Medallion & Golden Scissors Button */}
+        <div
+          className={`absolute z-30 transition-all duration-700 ease-out ${
+            isCut
+              ? "scale-150 opacity-0 pointer-events-none"
+              : "scale-100 opacity-100"
+          }`}
+        >
           <button
             onClick={handleCutRibbon}
-            className="group inline-flex items-center gap-2 bg-gradient-to-r from-[#94713E] via-[#C59B63] to-[#94713E] text-[#141210] px-4 py-1.5 rounded-full font-serif font-bold text-[10px] md:text-xs uppercase tracking-[0.25em] shadow-lg transform hover:scale-105 active:scale-95 transition-all"
-            title="Click to cut the ceremonial inaugural ribbon"
+            disabled={isCutting}
+            className="group relative flex flex-col items-center justify-center size-28 sm:size-32 md:size-36 rounded-full bg-gradient-to-tr from-[#8E6934] via-[#F3E5AB] to-[#8E6934] p-1.5 shadow-[0_0_50px_rgba(229,195,142,0.65)] hover:shadow-[0_0_70px_rgba(229,195,142,0.95)] hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer"
+            title="Click to cut the ceremonial inaugural ribbon and unveil Thaksha"
           >
-            <span className="text-sm transform group-hover:rotate-45 transition-transform">✂️</span>
-            <span>Tap to Cut Inaugural Ribbon</span>
-          </button>
-        ) : (
-          <div className="inline-flex items-center gap-2 text-[#E5C38E] font-serif text-[10px] md:text-xs uppercase tracking-[0.28em] font-medium animate-fade-in">
-            <Sparkles size={12} className="text-[#C59B63] animate-pulse" />
-            <span>The Ribbon Has Been Cut • Officially Open Worldwide</span>
-            <Sparkles size={12} className="text-[#C59B63] animate-pulse" />
-          </div>
-        )}
+            {/* Outer Radiating Glow Pulse */}
+            <span className="absolute -inset-3 rounded-full border-2 border-[#E5C38E]/50 animate-ping pointer-events-none" />
 
-        {/* Right Satin Ribbon */}
-        <div
-          className={`flex-1 h-0.5 bg-gradient-to-r from-[#E5C38E] via-[#C59B63] to-transparent transition-all duration-1000 ${
-            isCut ? "opacity-30 translate-x-12" : "opacity-100"
-          }`}
-        />
+            {/* Rosette scalloped edges / fluted ring */}
+            <div className="size-full rounded-full bg-gradient-to-b from-[#1C1612] via-[#2A2019] to-[#14100D] border-2 border-[#E5C38E] flex flex-col items-center justify-center p-2 text-center shadow-inner relative overflow-hidden">
+              {/* Shimmer light pass */}
+              <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+              {/* Ceremonial Gold Scissors */}
+              <span
+                className={`text-2xl sm:text-3xl md:text-4xl text-[#E5C38E] filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] transition-transform duration-300 ${
+                  isCutting
+                    ? "-rotate-45 scale-125"
+                    : "group-hover:rotate-12 group-hover:scale-110"
+                }`}
+              >
+                ✂️
+              </span>
+
+              <span className="font-serif text-[10px] sm:text-[11px] md:text-xs uppercase tracking-[0.22em] text-[#F4E3B5] font-bold mt-1 leading-tight">
+                Tap To Cut
+              </span>
+              <span className="text-[8px] uppercase tracking-[0.25em] text-[#C59B63] font-medium mt-0.5">
+                Unveil Site
+              </span>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* Bottom Subtitle & Bypass Option */}
+      <div
+        className={`flex flex-col items-center text-center transition-all duration-700 ${
+          isCutting ? "translate-y-12 opacity-0" : "translate-y-0 opacity-100"
+        }`}
+      >
+        <p className="font-serif italic text-sm md:text-base text-[#D8D2C7]/80 max-w-md">
+          "Sculpted from nature. Anointed by rituals. Unveiled for you today."
+        </p>
+        <button
+          onClick={handleSkip}
+          className="mt-4 text-[10px] uppercase tracking-[0.25em] text-[#A69F94] hover:text-[#EFECE6] border-b border-[#A69F94]/30 hover:border-[#EFECE6] pb-0.5 transition-colors cursor-pointer"
+        >
+          Enter Sanctuary Directly →
+        </button>
       </div>
     </div>
   );
@@ -410,6 +556,12 @@ export function LaunchFloatingBadge() {
           <p className="text-[11px] text-[#A69F94] mt-1 leading-relaxed">
             Every comb and brush is hand-carved from seasoned mature neem wood and cured with organic botanical oils.
           </p>
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("thaksha:reopen_ribbon"))}
+            className="mt-2 text-[9px] uppercase tracking-[0.2em] text-[#C59B63] hover:text-[#E5C38E] flex items-center gap-1 font-serif underline underline-offset-2 transition-colors cursor-pointer"
+          >
+            <span>✂️ Replay Ribbon Unveiling</span>
+          </button>
         </div>
         <button
           onClick={handleDismiss}
