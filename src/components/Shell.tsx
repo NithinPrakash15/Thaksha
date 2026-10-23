@@ -17,6 +17,7 @@ import {
   DiwaliToranAccent,
   DiwaliSparklerCanvas,
   DiwaliClickSparkler,
+  HangingDiwaliLamps,
   DiyaIcon,
   useIsDiwaliSeason,
 } from "./DiwaliCelebration";
@@ -114,6 +115,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
       {/* Ambient particles and click sparkles */}
       {isDiwali ? <DiwaliSparklerCanvas /> : <LaunchConfetti />}
       {isDiwali ? <DiwaliClickSparkler /> : <LaunchClickSparkles />}
+
+      {/* Hanging Swaying Traditional Deepavali Brass Lamps */}
+      {isDiwali && <HangingDiwaliLamps />}
 
       {/* Top Announcement Bar (Diwali, Launch celebration, or standard) */}
       {isDiwali ? (

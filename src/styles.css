@@ -189,3 +189,32 @@
   animation: diya-pulse 2.4s ease-in-out infinite;
 }
 
+/* Hanging Deepavali Lamps Swaying Pendulum Motion */
+@keyframes hanging-lamp-sway-left {
+  0%, 100% {
+    transform: rotate(-3.5deg);
+  }
+  50% {
+    transform: rotate(3deg);
+  }
+}
+
+@keyframes hanging-lamp-sway-right {
+  0%, 100% {
+    transform: rotate(3.5deg);
+  }
+  50% {
+    transform: rotate(-3deg);
+  }
+}
+
+.animate-hanging-lamp-left {
+  animation: hanging-lamp-sway-left 5.6s ease-in-out infinite;
+  transform-origin: top center;
+}
+
+.animate-hanging-lamp-right {
+  animation: hanging-lamp-sway-right 6.2s ease-in-out infinite;
+  transform-origin: top center;
+}
+

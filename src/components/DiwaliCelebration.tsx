@@ -331,3 +331,145 @@ export function DiwaliClickSparkler() {
 
   return null;
 }
+
+/**
+ * Hanging Traditional Deepavali Brass Lamps (Thooku Vilakku)
+ * Suspended on either side of the page with smooth, realistic pendulum swaying motion.
+ */
+export function HangingDiwaliLamps() {
+  const isDiwali = useIsDiwaliSeason();
+  if (!isDiwali) return null;
+
+  return (
+    <>
+      {/* Left Hanging Lamp */}
+      <div
+        className="fixed top-0 left-1.5 sm:left-4 md:left-8 z-30 pointer-events-none animate-hanging-lamp-left"
+        aria-hidden="true"
+      >
+        <HangingLampSvg />
+      </div>
+
+      {/* Right Hanging Lamp */}
+      <div
+        className="fixed top-0 right-1.5 sm:right-4 md:right-8 z-30 pointer-events-none animate-hanging-lamp-right"
+        aria-hidden="true"
+      >
+        <HangingLampSvg />
+      </div>
+    </>
+  );
+}
+
+function HangingLampSvg() {
+  return (
+    <div className="relative w-12 sm:w-16 md:w-20 h-56 sm:h-72 md:h-84 select-none">
+      {/* Ambient Warm Golden Halation behind the flame */}
+      <div className="absolute top-[64%] left-1/2 -translate-x-1/2 -translate-y-1/2 size-12 sm:size-16 rounded-full bg-amber-400/35 blur-xl animate-diya-glow pointer-events-none" />
+
+      <svg
+        viewBox="0 0 70 300"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        className="w-full h-full drop-shadow-[0_8px_16px_rgba(180,83,9,0.35)]"
+      >
+        <defs>
+          <linearGradient id="hangingBrassGrad" x1="15" y1="0" x2="55" y2="300" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#FDE047" />
+            <stop offset="0.3" stopColor="#D97706" />
+            <stop offset="0.7" stopColor="#92400E" />
+            <stop offset="1" stopColor="#F59E0B" />
+          </linearGradient>
+
+          <linearGradient id="hangingChainLink" x1="33" y1="0" x2="37" y2="0" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#FDE047" />
+            <stop offset="0.5" stopColor="#B45309" />
+            <stop offset="1" stopColor="#78350F" />
+          </linearGradient>
+
+          <linearGradient id="hangingLampFlame" x1="35" y1="165" x2="35" y2="200" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#FEF08A" />
+            <stop offset="0.35" stopColor="#F59E0B" />
+            <stop offset="0.75" stopColor="#EA580C" />
+            <stop offset="1" stopColor="#DC2626" />
+          </linearGradient>
+        </defs>
+
+        {/* Ceiling Anchor Ring */}
+        <circle cx="35" cy="5" r="4" stroke="url(#hangingBrassGrad)" strokeWidth="2.2" />
+
+        {/* Interlocking Brass Chain */}
+        <g stroke="url(#hangingChainLink)" strokeWidth="2" fill="none">
+          <line x1="35" y1="8" x2="35" y2="155" strokeDasharray="6 4" strokeWidth="2.5" />
+          {[18, 36, 54, 72, 90, 108, 126, 144].map((y) => (
+            <ellipse key={y} cx="35" cy={y} rx="3.2" ry="5.5" stroke="#FDE047" strokeWidth="1.3" opacity="0.85" />
+          ))}
+        </g>
+
+        {/* Top Canopy Finial (Artisanal brass dome/bell) */}
+        <path
+          d="M31 155 C31 151 39 151 39 155 L44 163 C44 165 26 165 26 163 Z"
+          fill="url(#hangingBrassGrad)"
+        />
+        <circle cx="35" cy="153" r="2.5" fill="#FEF08A" />
+
+        {/* Triple Suspension Chains holding the Lamp Bowl */}
+        <path d="M31 164 L19 205" stroke="#B45309" strokeWidth="1.5" strokeDasharray="3 2" />
+        <path d="M35 165 L35 203" stroke="#D97706" strokeWidth="1.5" strokeDasharray="3 2" />
+        <path d="M39 164 L51 205" stroke="#B45309" strokeWidth="1.5" strokeDasharray="3 2" />
+
+        {/* Flickering Flame (centered inside the lamp bowl) */}
+        <g className="animate-diya-flame" style={{ transformOrigin: "35px 200px" }}>
+          {/* Outer Flame */}
+          <path
+            d="M35 168 C35 168 43 182 43 192 C43 198 39.4 202 35 202 C30.6 202 27 198 27 192 C27 182 35 168 35 168 Z"
+            fill="url(#hangingLampFlame)"
+          />
+          {/* Inner Golden Flame */}
+          <path
+            d="M35 177 C35 177 40 186 40 193 C40 197 37.8 199.5 35 199.5 C32.2 199.5 30 197 30 193 C30 186 35 177 35 177 Z"
+            fill="#FEF08A"
+          />
+          {/* Hot White Heart */}
+          <ellipse cx="35" cy="194" rx="2" ry="3.5" fill="#FFFFFF" opacity="0.9" />
+        </g>
+
+        {/* Deepam Oil Lamp Bowl (Sculpted Brass) */}
+        <ellipse cx="35" cy="204" rx="22" ry="5" fill="#B45309" />
+        <ellipse cx="35" cy="203" rx="20" ry="3.8" fill="#F59E0B" />
+        <ellipse cx="35" cy="203" rx="17" ry="2.6" fill="#78350F" />
+
+        {/* Bowl Basin Body */}
+        <path
+          d="M13 204 C15 220 23 226 35 226 C47 226 55 220 57 204 C52 208 44 210 35 210 C26 210 18 208 13 204 Z"
+          fill="url(#hangingBrassGrad)"
+        />
+
+        {/* Decorative Rim Studs / Beads */}
+        <circle cx="18" cy="207" r="1.2" fill="#FEF08A" />
+        <circle cx="26" cy="209" r="1.3" fill="#FEF08A" />
+        <circle cx="35" cy="210" r="1.5" fill="#FEF08A" />
+        <circle cx="44" cy="209" r="1.3" fill="#FEF08A" />
+        <circle cx="52" cy="207" r="1.2" fill="#FEF08A" />
+
+        {/* Bowl Pedestal Base */}
+        <path d="M30 226 L40 226 L38 234 L32 234 Z" fill="#92400E" />
+
+        {/* Bottom Pendant Bell / Tassel Droplet */}
+        <line x1="35" y1="234" x2="35" y2="246" stroke="#B45309" strokeWidth="1.8" />
+        <circle cx="35" cy="242" r="1.8" fill="#FDE047" />
+
+        {/* Hanging Brass Bell */}
+        <path
+          d="M35 246 C31 249 28 256 28 261 L42 261 C42 256 39 249 35 246 Z"
+          fill="url(#hangingBrassGrad)"
+        />
+        <ellipse cx="35" cy="261" rx="7" ry="2" fill="#B45309" />
+        {/* Bell Clapper droplet */}
+        <circle cx="35" cy="265" r="2.2" fill="#FDE047" />
+        <line x1="35" y1="261" x2="35" y2="265" stroke="#78350F" strokeWidth="1.2" />
+      </svg>
+    </div>
+  );
+}
+
