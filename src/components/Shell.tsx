@@ -12,9 +12,19 @@ import {
   LaunchClickSparkles,
   useIsLaunchDay,
 } from "./LaunchCelebration";
+import {
+  DiwaliTopBanner,
+  DiwaliToranAccent,
+  DiwaliSparklerCanvas,
+  DiwaliFloatingDiyaWidget,
+  DiwaliClickSparkler,
+  DiyaIcon,
+  useIsDiwaliSeason,
+} from "./DiwaliCelebration";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const isLaunchDay = useIsLaunchDay();
+  const isDiwali = useIsDiwaliSeason();
   const [count, setCount] = useState(0);
   const [showIntro, setShowIntro] = useState(false);
   const [user, setUser] = useState<SafeUser | null>(null);
@@ -102,14 +112,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-brand-cream text-brand-ink font-sans flex flex-col">
       <Toaster richColors position="top-right" />
 
-      {/* Luxury Golden Confetti Burst (First visit on Launch Day only) */}
-      <LaunchConfetti />
+      {/* Ambient particles and click sparkles */}
+      {isDiwali ? <DiwaliSparklerCanvas /> : <LaunchConfetti />}
+      {isDiwali ? <DiwaliClickSparkler /> : <LaunchClickSparkles />}
 
-      {/* Interactive Golden Click Sparkles */}
-      <LaunchClickSparkles />
-
-      {/* Top Announcement Bar (Grand Launch celebration or standard) */}
-      {isLaunchDay ? (
+      {/* Top Announcement Bar (Diwali, Launch celebration, or standard) */}
+      {isDiwali ? (
+        <>
+          <DiwaliTopBanner />
+          <DiwaliToranAccent />
+        </>
+      ) : isLaunchDay ? (
         <LaunchTopBar />
       ) : (
         <div className="bg-brand-primary text-brand-cream px-4 py-2 text-center text-[10px] uppercase tracking-[0.25em] font-medium flex items-center justify-center gap-4">
@@ -144,12 +157,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <img src="/thaksha-logo.png" alt="Thaksha" className="h-10 w-10 object-contain" />
             <span className="font-serif text-2xl font-semibold uppercase tracking-wider">Thaksha</span>
           </Link>
-          {isLaunchDay && (
+          {isDiwali ? (
+            <span className="hidden sm:inline-flex items-center gap-1.5 bg-gradient-to-r from-[#B45309]/15 via-[#F59E0B]/25 to-[#B45309]/15 border border-[#F59E0B]/40 text-[#92400E] text-[9px] font-serif uppercase tracking-[0.22em] px-2.5 py-1 rounded-full font-bold shadow-sm">
+              <DiyaIcon className="w-3.5 h-3.5" />
+              <span>Shubh Deepavali</span>
+            </span>
+          ) : isLaunchDay ? (
             <span className="hidden sm:inline-flex items-center gap-1.5 bg-[#C59B63]/15 border border-[#C59B63]/40 text-[#8E6934] text-[9px] font-serif uppercase tracking-[0.22em] px-2.5 py-1 rounded-full font-bold shadow-sm">
               <Sparkles size={11} className="text-[#C59B63] animate-pulse" />
               <span>Est. 2026 • Inaugural Edition</span>
             </span>
-          )}
+          ) : null}
         </div>
 
         <div className="hidden gap-8 text-[11px] font-medium uppercase tracking-[0.22em] text-brand-primary md:flex">
@@ -305,8 +323,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
       </footer>
 
-      {/* Floating Launch Day Welcome Pill */}
-      <LaunchFloatingBadge />
+      {/* Festive Deepavali Diya Widget or Launch Welcome Pill */}
+      {isDiwali ? <DiwaliFloatingDiyaWidget /> : <LaunchFloatingBadge />}
     </div>
   );
 }

@@ -148,3 +148,44 @@
 @utility animate-logo-intro {
   animation: logo-intro 2.8s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
+
+/* Diwali Diya flame & golden ember animations */
+@keyframes diya-flame {
+  0%, 100% {
+    transform: scale(1, 1) rotate(-1deg);
+    filter: drop-shadow(0 -2px 6px rgba(255, 180, 0, 0.85)) drop-shadow(0 -4px 14px rgba(255, 120, 0, 0.5));
+  }
+  25% {
+    transform: scale(1.08, 0.95) rotate(1.5deg);
+    filter: drop-shadow(0 -3px 8px rgba(255, 200, 30, 0.95)) drop-shadow(0 -6px 18px rgba(255, 140, 0, 0.6));
+  }
+  50% {
+    transform: scale(0.94, 1.05) rotate(-2deg);
+    filter: drop-shadow(0 -2px 5px rgba(255, 160, 0, 0.8)) drop-shadow(0 -3px 12px rgba(255, 100, 0, 0.45));
+  }
+  75% {
+    transform: scale(1.04, 0.98) rotate(2deg);
+    filter: drop-shadow(0 -3px 9px rgba(255, 210, 40, 1)) drop-shadow(0 -5px 19px rgba(255, 150, 0, 0.65));
+  }
+}
+
+.animate-diya-flame {
+  animation: diya-flame 1.9s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+@keyframes diya-pulse {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.08);
+  }
+}
+
+.animate-diya-glow {
+  animation: diya-pulse 2.4s ease-in-out infinite;
+}
+

@@ -14,6 +14,7 @@ import {
   useIsLaunchDay,
   LaunchAmbientDust,
 } from "@/components/LaunchCelebration";
+import { DiyaIcon, useIsDiwaliSeason } from "@/components/DiwaliCelebration";
 
 export const Route = createFileRoute("/")({
   loader: async () => {
@@ -99,6 +100,7 @@ function Hero({ products }: { products: DbProductSummary[] }) {
 
   const [idx, setIdx] = useState(0);
   const isLaunchDay = useIsLaunchDay();
+  const isDiwali = useIsDiwaliSeason();
 
   useEffect(() => {
     if (slides.length <= 1) return;
@@ -156,12 +158,17 @@ function Hero({ products }: { products: DbProductSummary[] }) {
       <LaunchAmbientDust />
 
       <div className="order-2 lg:order-1 lg:col-span-5 relative z-10">
-        {isLaunchDay && (
+        {isDiwali ? (
+          <div className="mb-4 inline-flex items-center gap-2 bg-[#F59E0B]/15 border border-[#F59E0B]/40 px-3.5 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.28em] text-[#92400E] shadow-sm">
+            <DiyaIcon className="w-3.5 h-3.5" />
+            <span>Shubh Deepavali • Pure Neem Rituals</span>
+          </div>
+        ) : isLaunchDay ? (
           <div className="mb-4 inline-flex items-center gap-2 bg-[#C59B63]/15 border border-[#C59B63]/40 px-3.5 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.28em] text-brand-oak shadow-sm">
             <Sparkles size={12} className="text-[#C59B63] animate-pulse" />
             <span>Official Inauguration • Handcrafted Neem Rituals</span>
           </div>
-        )}
+        ) : null}
         <span className="mb-4 block text-[11px] font-semibold uppercase tracking-[0.3em] text-brand-sage">
           100% Seasoned Neem Wood
         </span>
@@ -243,8 +250,18 @@ function Hero({ products }: { products: DbProductSummary[] }) {
 }
 
 function Marquee() {
+  const isDiwali = useIsDiwaliSeason();
   const isLaunchDay = useIsLaunchDay();
-  const items = isLaunchDay
+  const items = isDiwali
+    ? [
+        "🪔 Shubh Deepavali",
+        "Festival of Light & Pure Wellness",
+        "100% Solid Mature Neem",
+        "Hand-Sculpted in Kerala",
+        "Anti-Static Sebum Distribution",
+        "Lifetime Form Guarantee",
+      ]
+    : isLaunchDay
     ? [
         "Inaugural Debut • October 2026",
         "Hand-Sculpted in Kerala",
