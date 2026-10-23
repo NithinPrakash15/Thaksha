@@ -1,6 +1,4 @@
 import { useEffect, useState, useRef } from "react";
-import { Sparkles, X } from "lucide-react";
-import { toast } from "sonner";
 
 // Active throughout the Diwali 2026 festive window (Oct 23 - Nov 5, 2026)
 export const DIWALI_EXPIRY_TIMESTAMP = new Date("2026-11-05T23:59:59+05:30").getTime();
@@ -263,94 +261,7 @@ export function DiwaliToranAccent() {
   );
 }
 
-/**
- * Interactive Deepavali Diya Lamp (Bottom Corner Widget)
- * Patrons can click to trigger a sparkler fountain and receive a Diwali blessing.
- */
-export function DiwaliFloatingDiyaWidget() {
-  const isDiwali = useIsDiwaliSeason();
-  const [dismissed, setDismissed] = useState(false);
-  const [litCount, setLitCount] = useState(0);
 
-  useEffect(() => {
-    if (sessionStorage.getItem("thaksha_diwali_widget_dismissed")) {
-      setDismissed(true);
-    }
-  }, []);
-
-  if (!isDiwali || dismissed) return null;
-
-  const handleLightDiya = (e: React.MouseEvent) => {
-    setLitCount((c) => c + 1);
-    toast.success("🪔 Shubh Deepavali! May wellness and prosperity grace your home.", {
-      icon: "✨",
-    });
-
-    // Dispatch starlight sparkles from button
-    const rect = e.currentTarget.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-
-    [-30, 0, 30].forEach((dx, i) => {
-      setTimeout(() => {
-        const ev = new MouseEvent("click", {
-          clientX: cx + dx,
-          clientY: cy - 20,
-        });
-        window.dispatchEvent(ev);
-      }, i * 100);
-    });
-  };
-
-  const handleDismiss = () => {
-    setDismissed(true);
-    sessionStorage.setItem("thaksha_diwali_widget_dismissed", "true");
-  };
-
-  return (
-    <aside
-      aria-label="Deepavali Greeting"
-      className="fixed bottom-5 right-5 z-40 max-w-xs rounded-xl border border-[#F59E0B]/40 bg-[#160B06]/95 backdrop-blur-md p-4 text-[#FDF8F0] shadow-[0_8px_30px_rgba(245,158,11,0.2)] animate-fade-in"
-    >
-      <div className="flex items-start gap-3">
-        {/* Animated Diya Lamp */}
-        <div className="flex-shrink-0 pt-0.5">
-          <DiyaIcon className="w-9 h-9" glowing={true} />
-        </div>
-
-        <div className="flex-1 pr-1 text-xs">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[9px] uppercase tracking-[0.25em] text-[#FBBF24] font-semibold">
-              Deepavali Greetings
-            </span>
-          </div>
-          <p className="font-serif text-sm font-semibold text-[#FDF8F0] mt-0.5 tracking-wide">
-            Happy Diwali from Thaksha
-          </p>
-          <p className="text-[11px] text-[#D1C7B7] mt-1 leading-relaxed">
-            Crafted with sacred mature neem wood. Wishing you a season of warmth, wellness, and purity.
-          </p>
-
-          <button
-            onClick={handleLightDiya}
-            className="mt-2.5 inline-flex items-center gap-1.5 bg-gradient-to-r from-[#9A3412] via-[#B45309] to-[#9A3412] text-[#FEF3C7] px-3 py-1 rounded-full text-[9px] font-serif uppercase tracking-[0.2em] font-bold shadow hover:scale-105 active:scale-95 transition-all cursor-pointer"
-          >
-            <span>🪔</span>
-            <span>{litCount === 0 ? "Light A Diya" : `Diya Lit (${litCount})`}</span>
-          </button>
-        </div>
-
-        <button
-          onClick={handleDismiss}
-          className="text-[#A89F91] hover:text-[#FDF8F0] p-0.5 transition-colors"
-          aria-label="Dismiss Diwali greeting"
-        >
-          <X size={14} />
-        </button>
-      </div>
-    </aside>
-  );
-}
 
 /**
  * Interactive Diwali Sparkler Embers on Cursor Click

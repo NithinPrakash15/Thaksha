@@ -16,7 +16,6 @@ import {
   DiwaliTopBanner,
   DiwaliToranAccent,
   DiwaliSparklerCanvas,
-  DiwaliFloatingDiyaWidget,
   DiwaliClickSparkler,
   DiyaIcon,
   useIsDiwaliSeason,
@@ -323,8 +322,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
       </footer>
 
-      {/* Festive Deepavali Diya Widget or Launch Welcome Pill */}
-      {isDiwali ? <DiwaliFloatingDiyaWidget /> : <LaunchFloatingBadge />}
+      {/* Launch Welcome Pill */}
+      {!isDiwali && <LaunchFloatingBadge />}
     </div>
   );
 }
