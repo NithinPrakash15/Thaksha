@@ -120,11 +120,11 @@ function ProductPage() {
         <div className="grid gap-12 lg:grid-cols-2">
           {/* Gallery View */}
           <section>
-            <div className="relative aspect-[4/5] overflow-hidden bg-brand-sage-soft/30 border border-brand-primary/5">
+            <div className="relative overflow-hidden bg-brand-sage-soft/30 border border-brand-primary/5 flex items-center justify-center">
               <img
                 src={activeImage}
                 alt={product.name}
-                className="h-full w-full object-cover transition-all duration-500"
+                className="block w-full h-auto max-h-[85vh] object-contain transition-all duration-500"
               />
 
               <div className="absolute top-4 left-4">
@@ -155,7 +155,7 @@ function ProductPage() {
                       activeImage === item ? "border-brand-oak scale-95" : "border-brand-primary/10 opacity-70 hover:opacity-100"
                     }`}
                   >
-                    <img src={item} alt="" className="h-full w-full object-cover" />
+                    <img src={item} alt="" className="h-full w-full object-contain bg-brand-sage-soft/30" />
                   </button>
                 ))}
               </div>

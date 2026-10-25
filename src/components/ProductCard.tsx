@@ -79,11 +79,19 @@ export function ProductCard({ product }: { product: CardProduct }) {
       <div>
         <Link to="/product/$slug" params={{ slug: product.slug }}>
           <div className="relative mb-5 aspect-[4/5] overflow-hidden bg-brand-sage-soft/30">
+            {/* Soft blurred backdrop fills empty space without cropping the real image */}
+            <img
+              src={product.image}
+              alt=""
+              aria-hidden="true"
+              loading="lazy"
+              className="absolute inset-0 h-full w-full object-cover scale-110 blur-2xl opacity-40 pointer-events-none"
+            />
             <img
               src={product.image}
               alt={product.name}
               loading="lazy"
-              className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+              className="relative h-full w-full object-contain transition-transform duration-700 group-hover:scale-[1.03]"
             />
 
             <div className="absolute left-4 top-4 flex flex-col gap-1.5">
